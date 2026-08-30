@@ -25,6 +25,9 @@ function cellHash(gx: number, gy: number): number {
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private vignette: CanvasGradient | null = null;
+  /** 晴天彩蛋：偶尔飞过的鸟群 */
+  private flocks: { start: number; y: number; dir: 1 | -1; count: number; speed: number }[] = [];
+  private nextFlockAt = 4000;
 
   constructor(canvas: HTMLCanvasElement) {
     canvas.width = GRID_W * TILE;
@@ -38,6 +41,14 @@ export class Renderer {
     this.drawTiles(f.grid);
     for (const [i, s] of SPAWNS.entries()) this.drawSpawnPad(s.gx, s.gy, i);
     this.drawGroundWeather(f);
+    // 晴天鸟群：地面影子画在物件之下
+    const birds = this.updateBirds(f, nowMs);
+    for (const b of birds) {
+      ctx.fillStyle = "rgba(60,90,60,.12)";
+      ctx.beginPath();
+      ctx.ellipse(b.x + 6, b.y + 74, 7, 2.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     for (const it of f.items) this.drawItem(it, nowMs);
     for (const b of f.bombs) this.drawBomb(b.gx, b.gy, b.fuse, nowMs);
     for (const fl of f.flames) this.drawFlame(fl, nowMs);
@@ -45,6 +56,8 @@ export class Renderer {
     for (const h of f.houses) this.drawHouse(h);
     for (const m of f.monsters) this.drawMonster(m, nowMs);
     for (const p of f.players) this.drawPlayer(p, nowMs);
+    // 鸟群本体
+    for (const b of birds) this.drawBird(b.x, b.y, b.flap, b.dir);
     this.drawSkyWeather(f, nowMs, viewer);
     this.drawVignette();
   }
@@ -329,6 +342,50 @@ export class Renderer {
       ctx.fillStyle = `rgba(255,255,240,${f.flash * 0.45})`;
       ctx.fillRect(0, 0, W, H);
     }
+  }
+
+  /** 晴天彩蛋：每隔一阵飞过一群小鸟（V 字队形 + 扇翅） */
+  private updateBirds(f: FrameData, nowMs: number): { x: number; y: number; flap: number; dir: 1 | -1 }[] {
+    if (f.weather !== "sunny") {
+      this.flocks = [];
+      return [];
+    }
+    if (nowMs > this.nextFlockAt) {
+      this.nextFlockAt = nowMs + 9_000 + (nowMs % 11_000);
+      this.flocks.push({
+        start: nowMs,
+        y: 34 + (nowMs % 90),
+        dir: nowMs % 2 < 1 ? 1 : -1,
+        count: 3 + (nowMs % 3),
+        speed: 0.085 + (nowMs % 40) * 0.001,
+      });
+    }
+    this.flocks = this.flocks.filter(fl => nowMs - fl.start < 7_200);
+    const out: { x: number; y: number; flap: number; dir: 1 | -1 }[] = [];
+    for (const fl of this.flocks) {
+      const t = nowMs - fl.start;
+      const travel = t * fl.speed * fl.dir;
+      const xBase = fl.dir === 1 ? -90 + travel : GRID_W * TILE + 90 - travel;
+      for (let i = 0; i < fl.count; i++) {
+        const x = xBase + i * 20 * fl.dir + (i % 2) * 6;
+        const y = fl.y + Math.abs(i - (fl.count - 1) / 2) * 9 + Math.sin(nowMs / 320 + i) * 3;
+        out.push({ x, y, flap: Math.sin(nowMs / 95 + i * 1.4), dir: fl.dir });
+      }
+    }
+    return out;
+  }
+
+  private drawBird(x: number, y: number, flap: number, dir: 1 | -1) {
+    const { ctx } = this;
+    const wingY = flap * 4.2;
+    ctx.strokeStyle = "rgba(96,110,128,.88)";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x - 7 * dir, y - wingY);
+    ctx.quadraticCurveTo(x - 2.5 * dir, y - wingY * 0.25, x, y);
+    ctx.quadraticCurveTo(x + 2.5 * dir, y - wingY * 0.25, x + 7 * dir, y - wingY);
+    ctx.stroke();
   }
 
   /** 柔和的暖色光晕（替代生硬暗角） */

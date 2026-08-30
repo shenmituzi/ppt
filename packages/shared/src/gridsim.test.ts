@@ -12,7 +12,8 @@ function makeSim(playerIds = ["a", "b"], weather: ConstructorParameters<typeof G
   const sim = new GameSim(42, playerIds, undefined, weather);
   sim.grid[idx(2, 1)] = Tile.Floor;
   sim.grid[idx(1, 2)] = Tile.Floor;
-  sim.grid[idx(13, 2)] = Tile.Floor;
+  sim.grid[idx(14, 1)] = Tile.Floor;
+  sim.grid[idx(15, 2)] = Tile.Floor;
   return sim;
 }
 

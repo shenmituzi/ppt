@@ -44,6 +44,8 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   let last = performance.now();
   let prevAlive = new Set<string>(); // 上一帧仍存活的角色
   let prevBombs = 0, prevFlames = 0, prevItems = 0; // 差量音效基准
+  const panel = document.getElementById("players-panel")!;
+  let lastPanelSig = "";
 
   function loop(now: number) {
     const dt = Math.min(50, now - last);
@@ -88,6 +90,22 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     } else {
       hudTime.textContent = `⏱ 突然死亡 ${Math.ceil((f.suddenDeathAt - f.elapsedMs) / 1000)}s`;
       hudTime.classList.remove("danger");
+    }
+
+    // 玩家状态栏（装备档位一目了然，损耗可见）
+    const sig = f.players.map(p => `${p.id}:${p.alive}:${p.bombsMax}/${p.flameLen}/${p.speedLevel}`).join("|");
+    if (sig !== lastPanelSig) {
+      lastPanelSig = sig;
+      const COLORS = ["#ff8a8a", "#7cc4ff", "#ffd97a", "#8de0a0"];
+      panel.innerHTML = f.players.map(p => {
+        const dot = COLORS[p.colorIndex % 4];
+        const dead = p.alive ? "" : " dead";
+        const name = p.id === myId ? "你" : (p.name || p.id);
+        return `<span class="pp${dead}" style="--dot:${dot}">
+          <i class="dot"></i>${name}
+          <em>泡${p.bombsMax ?? 1}</em><em>火${p.flameLen ?? 1}</em><em>速${p.speedLevel ?? 1}</em>
+        </span>`;
+      }).join("");
     }
 
     // 结算

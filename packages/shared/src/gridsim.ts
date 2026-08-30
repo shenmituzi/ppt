@@ -405,13 +405,15 @@ export class GameSim {
 
   // ---------- 冒险模式 ----------
 
-  /** 初始化怪物房屋：占住四个边中点，格子变为不可通行的地基 */
+  /** 初始化怪物房屋：占住四个边中点，格子变为不可通行的地基；并保证屋门一侧有站立格 */
   private initHouses(): void {
     const spots = [
-      [7, 1], [1, 6], [GRID_W - 2, 6], [7, GRID_H - 2],
+      [8, 1], [1, 7], [GRID_W - 2, 7], [8, GRID_H - 2],
     ];
     for (const [gx, gy] of spots) {
       this.grid[gy * GRID_W + gx] = Tile.Floor; // 地基清理干净
+      const doorY = gy + 1 <= GRID_H - 2 ? gy + 1 : gy - 1; // 朝地图中心一侧留出门口
+      this.grid[doorY * GRID_W + gx] = Tile.Floor;
       this.houseBlock.add(gy * GRID_W + gx);
       this.houses.push({
         id: this.nextId++, gx, gy,

@@ -14,6 +14,10 @@ export interface PlayerView {
   bootsOn?: boolean;
   rodOn?: boolean;
   lanternOn?: boolean;
+  /** 装备档位（状态栏展示，可随损耗下降） */
+  bombsMax?: number;
+  flameLen?: number;
+  speedLevel?: number;
 }
 
 export interface BombView { id: string; gx: number; gy: number; fuse: number }
@@ -68,6 +72,9 @@ export function simToFrame(sim: GameSim): FrameData {
       bootsOn: p.bootsOn,
       rodOn: p.rodOn,
       lanternOn: p.lanternOn,
+      bombsMax: p.bombsMax,
+      flameLen: p.flameLen,
+      speedLevel: p.speedLevel,
     })),
     bombs: sim.bombs.map(b => ({
       id: String(b.id), gx: b.gx, gy: b.gy, fuse: Math.max(0, b.explodeAt - sim.elapsedMs),
@@ -159,6 +166,9 @@ export class OnlineFrameBuilder {
         bootsOn: p.bootsOn,
         rodOn: p.rodOn,
         lanternOn: p.lanternOn,
+        bombsMax: p.bombsMax,
+        flameLen: p.flameLen,
+        speedLevel: p.speedLevel,
       });
     });
     for (const id of [...this.disp.keys()]) {

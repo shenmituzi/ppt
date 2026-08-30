@@ -1,6 +1,6 @@
 /** 地图尺寸（格） */
-export const GRID_W = 15;
-export const GRID_H = 13;
+export const GRID_W = 17;
+export const GRID_H = 15;
 export const CELL_COUNT = GRID_W * GRID_H;
 
 /** 客户端每格像素 */

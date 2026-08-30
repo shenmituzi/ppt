@@ -37,7 +37,7 @@ describe("generateMap", () => {
         }
     }
     // 每个出生点朝地图中心方向让出的两格通路必须是地板
-    const forced = [[3, 1], [1, 3], [11, 1], [13, 3], [1, 9], [3, 11], [11, 11], [13, 9]];
+    const forced = [[3, 1], [1, 3], [13, 1], [15, 3], [1, 11], [3, 13], [13, 13], [15, 11]];
     for (const [gx, gy] of forced) expect(grid[idx(gx, gy)]).toBe(Tile.Floor);
   });
 
