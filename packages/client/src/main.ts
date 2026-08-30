@@ -1,4 +1,14 @@
+import "../style.css";
 import { GameSim } from "@pt/shared";
+
+// 开发期注册 SW 绕过顽固缓存；生产构建不注册（并清理旧的）
+if (import.meta.env.DEV && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+} else if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then(rs => {
+    for (const r of rs) if (r.active && r.active.scriptURL.endsWith("/sw.js")) void r.unregister();
+  });
+}
 import { makeInputHub } from "./input";
 import { createTouchControls } from "./touch";
 import { Renderer, type GhostView } from "./render/renderer";
@@ -23,6 +33,11 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   const hud = document.getElementById("hud")!;
   const overlay = document.getElementById("overlay")!;
   const renderer = new Renderer(canvas);
+  const hudAlive = document.createElement("span");
+  hudAlive.className = "pill";
+  const hudTime = document.createElement("span");
+  hudTime.className = "pill warn";
+  hud.replaceChildren(hudAlive, hudTime);
   const ghosts = new Map<string, GhostView>();
   let last = performance.now();
   let prevAlive = new Set<string>(); // 上一帧仍存活的角色
@@ -53,19 +68,24 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
 
     renderer.draw(f, now, [...ghosts.values()]);
 
-    // HUD
-    const remain = Math.max(0, Math.ceil((f.suddenDeathAt - f.elapsedMs) / 1000));
-    hud.textContent = f.elapsedMs >= f.suddenDeathAt
-      ? "⚠ 突然死亡！"
-      : `存活 ${f.players.filter(p => p.alive).length} · 突然死亡倒计时 ${remain}s`;
+    // HUD（两枚信息胶囊）
+    if (f.elapsedMs >= f.suddenDeathAt) {
+      hudAlive.textContent = `存活 ${f.players.filter(p => p.alive).length}`;
+      hudTime.textContent = "⚠ 突然死亡！";
+      hudTime.classList.add("danger");
+    } else {
+      hudAlive.textContent = `存活 ${f.players.filter(p => p.alive).length}`;
+      hudTime.textContent = `⏱ 突然死亡 ${Math.ceil((f.suddenDeathAt - f.elapsedMs) / 1000)}s`;
+      hudTime.classList.remove("danger");
+    }
 
     // 结算
     if (f.phase === "ended" && overlay.classList.contains("hidden")) {
       const win = f.winnerIds.includes(myId);
       sfx.play(win ? "win" : "lose");
       overlay.innerHTML = f.winnerIds.length
-        ? `<div>${win ? "🏆 胜利！" : "💥 失败"}</div><button onclick="location.reload()">返回大厅</button>`
-        : `<div>🤝 平局</div><button onclick="location.reload()">返回大厅</button>`;
+        ? `<div class="result ${win ? "win" : "lose"}">${win ? "🏆 胜利！" : "💥 失败"}</div><button onclick="location.reload()">返回大厅</button>`
+        : `<div class="result draw">🤝 平局</div><button onclick="location.reload()">返回大厅</button>`;
       overlay.classList.remove("hidden");
     }
     requestAnimationFrame(loop);

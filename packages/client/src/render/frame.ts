@@ -8,6 +8,8 @@ export interface PlayerView {
   alive: boolean;
   invincible: boolean;
   moving: boolean;
+  /** 昵称（联网模式提供，渲染在头顶） */
+  name?: string;
 }
 
 export interface BombView { id: string; gx: number; gy: number; fuse: number }
@@ -100,6 +102,7 @@ export class OnlineFrameBuilder {
         alive: p.alive,
         invincible: p.invincible,
         moving: p.moving,
+        name: p.name,
       });
     });
     for (const id of [...this.disp.keys()]) {

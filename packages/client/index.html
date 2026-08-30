@@ -2,24 +2,29 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>泡泡堂</title>
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💣</text></svg>" />
 </head>
 <body>
   <div id="app">
-    <!-- 大厅（Task 14 启用） -->
+    <!-- 大厅 -->
     <section id="screen-lobby" class="screen hidden">
-      <h1>泡泡堂</h1>
-      <input id="nickname" maxlength="12" placeholder="输入昵称" />
-      <button id="btn-quick2">快速匹配 · 2人</button>
-      <button id="btn-quick4">快速匹配 · 4人</button>
-      <button id="btn-create">创建房间</button>
-      <div class="row">
-        <input id="room-code" maxlength="4" placeholder="房间号" />
-        <button id="btn-join">加入房间</button>
+      <div id="lobby-card">
+        <div id="logo">💣 泡泡堂</div>
+        <p id="lobby-sub">和好友来一局经典炸弹人</p>
+        <input id="nickname" maxlength="12" placeholder="输入昵称" />
+        <button id="btn-quick2" class="btn primary">⚡ 快速匹配 · 2人</button>
+        <button id="btn-quick4" class="btn primary">⚡ 快速匹配 · 4人</button>
+        <div class="divider"><span>或</span></div>
+        <button id="btn-create" class="btn">🏠 创建房间</button>
+        <div class="row">
+          <input id="room-code" maxlength="4" placeholder="房间号" />
+          <button id="btn-join" class="btn">加入</button>
+        </div>
+        <button id="btn-local" class="btn ghost">🎮 单机练习（无需等待）</button>
+        <p id="lobby-status"></p>
       </div>
-      <p id="lobby-status"></p>
     </section>
 
     <!-- 游戏 -->
@@ -33,5 +38,11 @@
     </section>
   </div>
   <script type="module" src="/src/main.ts"></script>
+  <script type="module">
+    // 开发缓存救急：内嵌浏览器无视缓存头，先注册 SW 强制全新加载
+    if (location.port === "5173" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  </script>
 </body>
 </html>

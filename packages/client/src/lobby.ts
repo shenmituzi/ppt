@@ -34,15 +34,17 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
   /** 等待画面：玩家列表；withStart 时显示房主"开始游戏"按钮；
    *  need 传入匹配目标人数，超过 10 秒未凑齐在状态栏给出指引 */
   function showWaiting(room: GameRoom, withStart: boolean, need = 0) {
-    lobby.querySelectorAll("button, input, p").forEach(el => {
+    const card = document.getElementById("lobby-card")!;
+    card.querySelectorAll("button, input, p, .divider").forEach(el => {
       if (el.id !== "lobby-status") (el as HTMLElement).style.display = "none";
     });
     const info = document.createElement("p");
     const startBtn = document.createElement("button");
+    startBtn.className = "btn primary";
     startBtn.textContent = "开始游戏";
     startBtn.onclick = () => room.send("start");
-    if (withStart) lobby.appendChild(startBtn);
-    lobby.appendChild(info);
+    if (withStart) card.appendChild(startBtn);
+    card.appendChild(info);
     const startAt = Date.now();
     let hinted = false;
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -67,11 +69,8 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
     timer = setInterval(refresh, 1000); // 单人等待时状态不再变化，靠轮询驱动提示
   }
 
-  // 单机练习入口（一个人也能立刻玩，放显眼位置）
-  const localBtn = document.createElement("button");
-  localBtn.textContent = "单机练习（无需等待）";
-  localBtn.onclick = onLocal;
-  lobby.appendChild(localBtn);
+  // 单机练习入口（index.html 中的 btn-local）
+  document.getElementById("btn-local")!.onclick = onLocal;
 
   // 匹配：进入队列后显示等待室；10 秒还没凑齐人给出明确指引
   let waitHint: ReturnType<typeof setTimeout> | undefined;
