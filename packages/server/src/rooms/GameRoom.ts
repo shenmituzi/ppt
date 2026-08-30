@@ -64,6 +64,9 @@ export class GameRoom extends Room<GameRoomState> {
     this.onMessage("bomb", client => {
       this.sim?.placeBomb(client.sessionId);
     });
+    this.onMessage("attack", client => {
+      this.sim?.attack(client.sessionId);
+    });
   }
 
   onJoin(client: Client) {
@@ -164,6 +167,8 @@ export class GameRoom extends Room<GameRoomState> {
         this.broadcast("wx-warn", { gx: ev.gx, gy: ev.gy, strikeAt: ev.strikeAt });
       } else if (ev.type === "lightningStrike") {
         this.broadcast("wx-strike", { gx: ev.gx, gy: ev.gy });
+      } else if (ev.type === "laser") {
+        this.broadcast("laser", { cells: ev.cells.flatMap(c => [c.gx, c.gy]) });
       }
     }
   }

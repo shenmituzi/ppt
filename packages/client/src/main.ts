@@ -138,10 +138,12 @@ function enterLocalGame(playerId = "me") {
   hub.setHandlers({
     onDir: d => sim.setInput(playerId, d),
     onBomb: () => sim.placeBomb(playerId),
+    onAttack: () => sim.attack(playerId),
   });
-  // 闪电事件 → 客户端特效
+  // 闪电/激光事件 → 客户端特效
   const warns: { gx: number; gy: number; strikeAt: number }[] = [];
   const strikes: { gx: number; gy: number; at: number }[] = [];
+  const beams: { cells: { gx: number; gy: number }[]; at: number }[] = [];
   runGameLoop((dt, now) => {
     sim.step(dt);
     for (const ev of sim.drainEvents()) {
@@ -149,14 +151,19 @@ function enterLocalGame(playerId = "me") {
       else if (ev.type === "lightningStrike") {
         strikes.push({ gx: ev.gx, gy: ev.gy, at: now });
         sfx.play("thunder");
+      } else if (ev.type === "laser") {
+        beams.push({ cells: ev.cells, at: now });
+        sfx.play("laser");
       }
     }
     // 清理过期特效
     for (let i = warns.length - 1; i >= 0; i--) if (sim.elapsedMs > warns[i].strikeAt + 500) warns.splice(i, 1);
     for (let i = strikes.length - 1; i >= 0; i--) if (now - strikes[i].at > 300) strikes.splice(i, 1);
+    for (let i = beams.length - 1; i >= 0; i--) if (now - beams[i].at > 260) beams.splice(i, 1);
     const f = simToFrame(sim);
     f.warnings = warns;
     f.strikes = strikes;
+    f.beams = beams;
     return f;
   }, playerId);
 }
@@ -171,8 +178,14 @@ async function enterOnlineGame(room: Room<any>) {
   hub.setHandlers({
     onDir: d => room.send("dir", { dir: d }),
     onBomb: () => room.send("bomb"),
+    onAttack: () => room.send("attack"),
   });
   const builder = new OnlineFrameBuilder(room);
+  room.onMessage("laser", (d: { cells: number[] }) => {
+    const cells = [];
+    for (let i = 0; i + 1 < d.cells.length; i += 2) cells.push({ gx: d.cells[i], gy: d.cells[i + 1] });
+    builder.addBeam(cells);
+  });
   room.onMessage("wx-warn", w => builder.addWarn(w));
   room.onMessage("wx-strike", s => {
     builder.addStrike(s);

@@ -40,8 +40,8 @@ describe("syncState", () => {
     expect(bomb.fuse).toBeGreaterThan(1900);
     expect(bomb.fuse).toBeLessThanOrEqual(2000);
 
-    // 泡泡爆炸后从状态里删除，火焰出现
-    for (let i = 0; i < 26; i++) sim.step(100);
+    // 泡泡爆炸后从状态里删除，火焰出现（在 0.5s 火焰寿命内断言）
+    for (let i = 0; i < 20; i++) sim.step(100);
     syncState(state, sim);
     expect(state.bombs.size).toBe(0);
     expect(state.flames.size).toBe(1);

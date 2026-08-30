@@ -18,7 +18,14 @@ export interface PlayerView {
   bombsMax?: number;
   flameLen?: number;
   speedLevel?: number;
+  lives?: number;
+  weapon?: string;
+  mounted?: boolean;
+  trapped?: boolean;
 }
+export interface BulletView { id: string; x: number; y: number; dx: number; dy: number }
+export interface PortalPairView { id: string; ax: number; ay: number; bx: number; by: number; remainingMs: number }
+export interface BeamView { cells: Vec[]; at: number }
 
 export interface BombView { id: string; gx: number; gy: number; fuse: number }
 export interface FlameView { id: string; cells: Vec[]; life: number }
@@ -45,6 +52,9 @@ export interface FrameData {
   strikes: StrikeView[];
   monsters: MonsterView[];
   houses: HouseView[];
+  bullets: BulletView[];
+  portals: PortalPairView[];
+  beams: BeamView[];
   /** 全屏闪电白闪强度 0~1 */
   flash: number;
   weather: string;
@@ -75,6 +85,10 @@ export function simToFrame(sim: GameSim): FrameData {
       bombsMax: p.bombsMax,
       flameLen: p.flameLen,
       speedLevel: p.speedLevel,
+      lives: p.lives,
+      weapon: p.weapon,
+      mounted: p.mounted,
+      trapped: sim.elapsedMs < p.trappedUntil,
     })),
     bombs: sim.bombs.map(b => ({
       id: String(b.id), gx: b.gx, gy: b.gy, fuse: Math.max(0, b.explodeAt - sim.elapsedMs),
@@ -85,6 +99,12 @@ export function simToFrame(sim: GameSim): FrameData {
     items: [...sim.items.values()].map(it => ({ id: String(it.id), gx: it.gx, gy: it.gy, type: it.type })),
     warnings: [],
     strikes: [],
+    bullets: sim.bullets.map(b => ({ id: String(b.id), x: b.x, y: b.y, dx: b.dx, dy: b.dy })),
+    portals: sim.portalPairs.map(pp => ({
+      id: String(pp.id), ax: pp.ax, ay: pp.ay, bx: pp.bx, by: pp.by,
+      remainingMs: Math.max(0, pp.until - sim.elapsedMs),
+    })),
+    beams: [],
     flash: 0,
     weather: sim.weather,
     phase: sim.phase,
@@ -124,6 +144,10 @@ export class OnlineFrameBuilder {
   private warns: (WarnView & { receivedAt: number })[] = [];
   private strikes: StrikeView[] = [];
   private flashUntil = 0;
+  private beams: BeamView[] = [];
+  addBeam(cells: Vec[]) {
+    this.beams.push({ cells, at: performance.now() });
+  }
 
   constructor(private room: Room<GameRoomStateView>) {}
 
@@ -169,6 +193,10 @@ export class OnlineFrameBuilder {
         bombsMax: p.bombsMax,
         flameLen: p.flameLen,
         speedLevel: p.speedLevel,
+        lives: p.lives,
+        weapon: p.weapon,
+        mounted: p.mounted,
+        trapped: p.trapped,
       });
     });
     for (const id of [...this.disp.keys()]) {
@@ -188,6 +216,12 @@ export class OnlineFrameBuilder {
     s.monsters.forEach((m: any) => monsters.push({
       id: m.id, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp, level: m.level, state: m.state,
     }));
+    const bullets: BulletView[] = [];
+    s.bullets.forEach((bl: any) => bullets.push({ id: bl.id, x: bl.x, y: bl.y, dx: bl.dx, dy: bl.dy }));
+    const portals: PortalPairView[] = [];
+    s.portals.forEach((pp: any) => portals.push({
+      id: pp.id, ax: pp.ax, ay: pp.ay, bx: pp.bx, by: pp.by, remainingMs: pp.remainingMs,
+    }));
     const houses: HouseView[] = [];
     s.houses.forEach((h: any) => houses.push({
       id: h.id, gx: h.gx, gy: h.gy, hp: h.hp, maxHp: h.maxHp, destroyed: h.destroyed,
@@ -200,6 +234,9 @@ export class OnlineFrameBuilder {
       items,
       monsters,
       houses,
+      bullets,
+      portals,
+      beams: this.beams.filter(bm => nowMs - bm.at < 260),
       warnings: this.warns.filter(w => s.serverElapsedMs < w.strikeAt + 500),
       strikes: this.strikes.filter(st => nowMs - st.at < 300),
       flash: nowMs < this.flashUntil ? (this.flashUntil - nowMs) / 220 : 0,

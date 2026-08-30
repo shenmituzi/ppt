@@ -178,6 +178,16 @@ body {
   -webkit-touch-callout: none;
 }
 #bomb-btn:active { background: rgba(255, 140, 115, .9); }
+#atk-btn {
+  position: absolute; right: 118px; bottom: 52px;
+  width: 64px; height: 64px; border-radius: 50%;
+  font-size: 30px; line-height: 62px; text-align: center;
+  background: rgba(126, 92, 255, .55);
+  border: 2px solid rgba(255, 255, 255, .7);
+  touch-action: none; pointer-events: auto;
+  -webkit-touch-callout: none;
+}
+#atk-btn:active { background: rgba(126, 92, 255, .85); }
 
 /* 手机小屏 */
 @media (max-width: 460px) {

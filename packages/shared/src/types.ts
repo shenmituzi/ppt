@@ -21,7 +21,9 @@ export type GameEvent =
   /** 雷雨：闪电即将劈中某格（客户端显示警示圈） */
   | { type: "lightningWarn"; gx: number; gy: number; strikeAt: number }
   /** 雷雨：闪电落下（劈中软墙会烧毁并可能掉道具，劈中人即死，避雷针可免疫） */
-  | { type: "lightningStrike"; gx: number; gy: number; item: ItemType | null };
+  | { type: "lightningStrike"; gx: number; gy: number; item: ItemType | null }
+  /** 激光剑挥砍（客户端渲染光束） */
+  | { type: "laser"; ownerId: string; cells: Vec[] };
 
 export function dirDx(d: Dir | null): number {
   return d === "left" ? -1 : d === "right" ? 1 : 0;

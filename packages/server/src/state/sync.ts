@@ -1,7 +1,7 @@
 import { GameSim } from "@pt/shared";
 import {
   GameRoomState, PlayerState, BombState, FlameState, ItemState,
-  MonsterState, HouseState,
+  MonsterState, HouseState, BulletState, PortalState,
 } from "./GameRoomState";
 
 export function gridToString(grid: Uint8Array): string {
@@ -34,6 +34,10 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
     ps.bootsOn = p.bootsOn;
     ps.rodOn = p.rodOn;
     ps.lanternOn = p.lanternOn;
+    ps.lives = p.lives;
+    ps.weapon = p.weapon;
+    ps.mounted = p.mounted;
+    ps.trapped = sim.elapsedMs < p.trappedUntil;
   }
 
   const bombIds = new Set<string>();
@@ -113,6 +117,39 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
   }
   for (const key of [...state.monsters.keys()]) {
     if (!monsterIds.has(key)) state.monsters.delete(key);
+  }
+  const bulletIds = new Set<string>();
+  for (const bl of sim.bullets) {
+    const key = String(bl.id);
+    bulletIds.add(key);
+    let bs = state.bullets.get(key);
+    if (!bs) {
+      bs = new BulletState();
+      bs.id = key;
+      state.bullets.set(key, bs);
+    }
+    bs.x = bl.x;
+    bs.y = bl.y;
+  }
+  for (const key of [...state.bullets.keys()]) {
+    if (!bulletIds.has(key)) state.bullets.delete(key);
+  }
+  const portalIds = new Set<string>();
+  for (const pp of sim.portalPairs) {
+    const key = String(pp.id);
+    portalIds.add(key);
+    let ps = state.portals.get(key);
+    if (!ps) {
+      ps = new PortalState();
+      ps.id = key;
+      ps.ax = pp.ax; ps.ay = pp.ay;
+      ps.bx = pp.bx; ps.by = pp.by;
+      state.portals.set(key, ps);
+    }
+    ps.remainingMs = Math.max(0, Math.min(65_535, pp.until - sim.elapsedMs));
+  }
+  for (const key of [...state.portals.keys()]) {
+    if (!portalIds.has(key)) state.portals.delete(key);
   }
   const houseIds = new Set<string>();
   for (const h of sim.houses) {

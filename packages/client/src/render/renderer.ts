@@ -8,6 +8,69 @@ import {
   drawMonsterBody, rr, type ViewerView,
 } from "./cozy";
 
+/** 骑乘载具的小自行车（画在角色脚下） */
+function drawBike(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
+  ctx.strokeStyle = "#f26d6d";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  for (const wx of [-6, 6]) {
+    ctx.beginPath();
+    ctx.arc(cx + wx, cy + 8, 3.4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, cy + 8);
+  ctx.lineTo(cx - 2, cy + 2);
+  ctx.lineTo(cx + 4, cy + 2);
+  ctx.lineTo(cx + 6, cy + 8);
+  ctx.lineTo(cx - 6, cy + 8);
+  ctx.moveTo(cx - 2, cy + 2);
+  ctx.lineTo(cx + 6, cy + 8);
+  ctx.stroke();
+}
+
+/** 精灵球（困住玩家的表现） */
+function drawPokeball(ctx: CanvasRenderingContext2D, cx: number, cy: number, now: number) {
+  const wobble = Math.sin(now / 120) * 0.12;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(wobble);
+  ctx.beginPath();
+  ctx.arc(0, 0, 13, Math.PI, 0);
+  ctx.fillStyle = "#f26d6d";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 0, 13, 0, Math.PI);
+  ctx.fillStyle = "#f5f5f5";
+  ctx.fill();
+  ctx.strokeStyle = "#3a3548";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-13, 0);
+  ctx.lineTo(13, 0);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+  ctx.fillStyle = "#f5f5f5";
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 穿梭胶囊（成对出现，呼吸光圈） */
+function drawPortal(ctx: CanvasRenderingContext2D, cx: number, cy: number, now: number) {
+  const pulse = 0.5 + 0.5 * Math.sin(now / 260);
+  ctx.strokeStyle = `rgba(94,215,255,${0.5 + pulse * 0.4})`;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 10 + pulse * 2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = `rgba(94,215,255,${0.25 + pulse * 0.2})`;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 6 + pulse * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export const PLAYER_COLORS = ["#ff8a8a", "#7cc4ff", "#ffd97a", "#8de0a0"];
 
 export interface GhostView { x: number; y: number; colorIndex: number; diedAtMs: number }
@@ -41,6 +104,11 @@ export class Renderer {
     this.drawTiles(f.grid);
     for (const [i, s] of SPAWNS.entries()) this.drawSpawnPad(s.gx, s.gy, i);
     this.drawGroundWeather(f);
+    // 穿梭胶囊（地面层，呼吸光圈）
+    for (const pp of f.portals) {
+      drawPortal(ctx, center(pp.ax), center(pp.ay), nowMs);
+      drawPortal(ctx, center(pp.bx), center(pp.by), nowMs);
+    }
     // 晴天鸟群：地面影子画在物件之下
     const birds = this.updateBirds(f, nowMs);
     for (const b of birds) {
@@ -58,6 +126,30 @@ export class Renderer {
     for (const p of f.players) this.drawPlayer(p, nowMs);
     // 鸟群本体
     for (const b of birds) this.drawBird(b.x, b.y, b.flap, b.dir);
+    // 子弹（发光小弹丸）
+    for (const bl of f.bullets) {
+      ctx.fillStyle = "rgba(255,240,150,.95)";
+      ctx.beginPath();
+      ctx.arc(center(bl.x), center(bl.y), 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,240,150,.35)";
+      ctx.beginPath();
+      ctx.arc(center(bl.x), center(bl.y), 5.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 激光光束
+    for (const bm of f.beams) {
+      const age = (nowMs - bm.at) / 260;
+      ctx.strokeStyle = `rgba(168,255,94,${1 - age})`;
+      ctx.lineWidth = 5 * (1 - age) + 1.5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      bm.cells.forEach((c, i) => {
+        if (i === 0) ctx.moveTo(center(c.gx), center(c.gy));
+        else ctx.lineTo(center(c.gx), center(c.gy));
+      });
+      ctx.stroke();
+    }
     this.drawSkyWeather(f, nowMs, viewer);
     this.drawVignette();
   }
@@ -158,6 +250,7 @@ export class Renderer {
     if (p.bootsOn) badge("❄");
     if (p.rodOn) badge("⚡");
     if (p.lanternOn) badge("🏮");
+    if (p.weapon && p.weapon !== "none" && p.weapon !== "shield") badge("⚔");
     // 昵称
     if (p.name) {
       ctx.font = 'bold 10px "Microsoft YaHei", sans-serif';

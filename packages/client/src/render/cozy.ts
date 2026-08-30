@@ -401,6 +401,12 @@ export function drawItemTile(ctx: CanvasRenderingContext2D, cx: number, cy: numb
     [ItemType.Boots]: "#6fb6e8",
     [ItemType.Rod]: "#e8b23f",
     [ItemType.Lantern]: "#ff9f5a",
+    [ItemType.Vehicle]: "#f26d6d",
+    [ItemType.Portal]: "#5ed7ff",
+    [ItemType.Laser]: "#a8ff5e",
+    [ItemType.Pistol]: "#8f9bb0",
+    [ItemType.Shield]: "#7fd0c9",
+    [ItemType.Pokeball]: "#f26d6d",
   };
   const c = colors[type];
   // 底牌

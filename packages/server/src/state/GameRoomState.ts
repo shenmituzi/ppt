@@ -18,6 +18,25 @@ export class PlayerState extends Schema {
   @type("boolean") bootsOn = false;
   @type("boolean") rodOn = false;
   @type("boolean") lanternOn = false;
+  @type("uint8") lives = 3;
+  @type("string") weapon = "none";
+  @type("boolean") mounted = false;
+  @type("boolean") trapped = false;
+}
+
+export class BulletState extends Schema {
+  @type("string") id = "";
+  @type("float32") x = 0;
+  @type("float32") y = 0;
+}
+
+export class PortalState extends Schema {
+  @type("string") id = "";
+  @type("int8") ax = 0;
+  @type("int8") ay = 0;
+  @type("int8") bx = 0;
+  @type("int8") by = 0;
+  @type("uint16") remainingMs = 0;
 }
 
 export class BombState extends Schema {
@@ -79,5 +98,7 @@ export class GameRoomState extends Schema {
   @type({ map: ItemState }) items = new MapSchema<ItemState>();
   @type({ map: MonsterState }) monsters = new MapSchema<MonsterState>();
   @type({ map: HouseState }) houses = new MapSchema<HouseState>();
+  @type({ map: BulletState }) bullets = new MapSchema<BulletState>();
+  @type({ map: PortalState }) portals = new MapSchema<PortalState>();
   @type(["string"]) winnerIds = new ArraySchema<string>();
 }

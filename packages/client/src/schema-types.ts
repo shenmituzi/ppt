@@ -5,6 +5,7 @@ export interface PlayerStateView {
   bombsMax: number; flameLen: number; speedLevel: number;
   alive: boolean; invincible: boolean; connected: boolean;
   bootsOn: boolean; rodOn: boolean; lanternOn: boolean;
+  lives: number; weapon: string; mounted: boolean; trapped: boolean;
 }
 export interface MonsterStateView {
   id: string; x: number; y: number;
@@ -28,5 +29,7 @@ export interface GameRoomStateView {
   items: Map<string, { id: string; gx: number; gy: number; type: number }>;
   monsters: Map<string, MonsterStateView>;
   houses: Map<string, HouseStateView>;
+  bullets: Map<string, { id: string; x: number; y: number }>;
+  portals: Map<string, { id: string; ax: number; ay: number; bx: number; by: number; remainingMs: number }>;
   winnerIds: string[];
 }

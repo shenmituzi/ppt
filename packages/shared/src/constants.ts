@@ -55,6 +55,18 @@ export enum ItemType {
   Rod = 4,
   /** 提灯：迷雾天气视野变大 */
   Lantern = 5,
+  /** 载具（自行车/汽车）：骑上移速大幅提升，被炸会掉下来给别人捡 */
+  Vehicle = 6,
+  /** 穿梭胶囊：拾取后地图上出现一对胶囊，踩上去互相传送 */
+  Portal = 7,
+  /** 激光剑：朝面朝方向攻击，范围 2 格 */
+  Laser = 8,
+  /** 手枪：朝面朝方向射出子弹，直线飞行，遇障碍销毁 */
+  Pistol = 9,
+  /** 盾牌：挡下手枪子弹并反弹 */
+  Shield = 10,
+  /** 精灵球：捕捉最近的对手，困住 5 秒 */
+  Pokeball = 11,
 }
 
 /** 天气 */
@@ -112,3 +124,18 @@ export const HOUSE_MAX_HP = 12; // 每次爆炸命中 -2
 export const HOUSE_HEAL_PER_SEC = 3;
 export const MONSTER_RETREAT_RATIO = 0.3; // 血量低于 30% 回屋
 export const BUFF_DECAY_MS = 40_000; // 装备损耗：每 40 秒属性 -1
+
+// ---------- 生命与武器 ----------
+export const PLAYER_LIVES = 3; // 每人三条命
+export const RESPAWN_MS = 1_500; // 阵亡后复活等待
+export const RESPAWN_INVINCIBLE_MS = 3_000; // 复活后无敌
+export const MOUNT_SPEED_FACTOR = 1.6; // 载具移速倍率
+export const LASER_RANGE = 2; // 激光剑攻击距离（格）
+export const LASER_COOLDOWN = 1_200;
+export const PISTOL_COOLDOWN = 800;
+export const PISTOL_SPEED = 13; // 子弹速度（格/秒）
+export const PISTOL_RANGE = 8; // 子弹最大飞行距离（格）
+export const PORTAL_TTL = 25_000; // 穿梭胶囊存活时间
+export const PORTAL_COOLDOWN = 3_000; // 传送后再次使用间隔
+export const CAPTURE_RANGE = 2.5; // 精灵球捕捉距离（格）
+export const CAPTURE_MS = 5_000; // 困住时长

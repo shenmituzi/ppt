@@ -7,6 +7,10 @@ import {
   MONSTER_BASE_HP, MONSTER_HP_PER_LEVEL, MONSTER_BASE_SPEED, MONSTER_SPEED_PER_LEVEL,
   MONSTER_MAX_SPEED, MONSTER_MAX_COUNT, HOUSE_MAX_HP, HOUSE_HEAL_PER_SEC,
   MONSTER_RETREAT_RATIO, BUFF_DECAY_MS,
+  PLAYER_LIVES, RESPAWN_MS, RESPAWN_INVINCIBLE_MS, MOUNT_SPEED_FACTOR,
+  LASER_RANGE, LASER_COOLDOWN, PISTOL_COOLDOWN, PISTOL_SPEED, PISTOL_RANGE,
+  PORTAL_TTL, PORTAL_COOLDOWN, CAPTURE_RANGE, CAPTURE_MS,
+  SPAWNS,
   Tile, ItemType, isSoft, type WeatherType, type GameType,
 } from "./constants";
 import { Dir, DirInput, GameEvent, Vec, dirDx, dirDy } from "./types";
@@ -37,6 +41,22 @@ export interface SimPlayer {
   rodOn: boolean;
   /** 迷雾天气：提灯（视野更大） */
   lanternOn: boolean;
+  /** 剩余生命（复活机制的存量） */
+  lives: number;
+  /** >0 表示阵亡等待复活 */
+  respawnAt: number;
+  /** 骑乘载具 */
+  mounted: boolean;
+  /** 当前武器：none / laser / pistol / shield / pokeball */
+  weapon: string;
+  /** 下一次攻击可用时间 */
+  attackReadyAt: number;
+  /** 面朝方向（最后一次移动方向），武器攻击用 */
+  facing: Dir | null;
+  /** 被精灵球困住的截止时间 */
+  trappedUntil: number;
+  /** 穿梭胶囊冷却 */
+  portalCdUntil: number;
 }
 
 export interface SimBomb {
@@ -65,6 +85,25 @@ interface PendingStrike {
   gx: number;
   gy: number;
   strikeAt: number;
+}
+
+export interface SimBullet {
+  id: number;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  ownerId: string;
+  traveled: number;
+}
+
+export interface SimPortalPair {
+  id: number;
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+  until: number;
 }
 
 export interface SimMonster {
@@ -113,6 +152,8 @@ export class GameSim {
   gatherEndsAt = 0;
   houses: SimHouse[] = [];
   monsters: SimMonster[] = [];
+  bullets: SimBullet[] = [];
+  portalPairs: SimPortalPair[] = [];
 
   protected events: GameEvent[] = [];
   protected rng: () => number;
@@ -146,6 +187,9 @@ export class GameSim {
         bombsMax: 1, bombsActive: 0, flameLen: 1, speedLevel: 1,
         alive: true, invincibleUntil: SPAWN_INVINCIBLE_MS,
         bootsOn: false, rodOn: false, lanternOn: false,
+        lives: PLAYER_LIVES, respawnAt: 0, mounted: false,
+        weapon: "none", attackReadyAt: 0, facing: null,
+        trappedUntil: 0, portalCdUntil: 0,
       });
     });
     if (this.gameType === "adventure") {
@@ -182,7 +226,10 @@ export class GameSim {
   step(dtMs: number): void {
     if (this.phase !== "playing" && this.phase !== "gathering") return;
     this.elapsedMs += dtMs;
+    this.stepRespawns();
     for (const p of this.players.values()) this.stepPlayer(p, dtMs);
+    this.stepBullets(dtMs);
+    this.stepPortals();
     this.stepBombs();
     this.stepExplosions();
     if (this.weather === "rain") {
@@ -216,11 +263,19 @@ export class GameSim {
 
   private stepPlayer(p: SimPlayer, dtMs: number): void {
     if (!p.alive) return;
+    // 被精灵球困住：无法移动
+    if (this.elapsedMs < p.trappedUntil) {
+      p.dir = null;
+      p.input = "none";
+      return;
+    }
     // 静止时先尝试起步；起步后同一帧即推进（起步帧不浪费）
     if (p.dir === null) this.tryContinue(p);
     if (p.dir !== null) {
+      p.facing = p.dir;
       const snowFactor = this.weather === "snow" && !p.bootsOn ? SNOW_SLOW_FACTOR : 1;
-      const speed = SPEED_LEVELS[p.speedLevel - 1] * snowFactor;
+      const mountFactor = p.mounted ? MOUNT_SPEED_FACTOR : 1;
+      const speed = SPEED_LEVELS[p.speedLevel - 1] * snowFactor * mountFactor;
       p.progress += (speed * dtMs) / 1000;
       if (p.progress >= 1) {
         p.x = p.fromX + dirDx(p.dir);
@@ -273,6 +328,12 @@ export class GameSim {
         break;
       case ItemType.Rod: p.rodOn = true; break;
       case ItemType.Lantern: p.lanternOn = true; break;
+      case ItemType.Vehicle: p.mounted = true; break; // 骑上载具：移速 x1.6，被炸会掉下来
+      case ItemType.Portal: this.spawnPortalPair(); break; // 地图上出现一对胶囊
+      case ItemType.Laser: p.weapon = "laser"; break;
+      case ItemType.Pistol: p.weapon = "pistol"; break;
+      case ItemType.Shield: p.weapon = "shield"; break;
+      case ItemType.Pokeball: p.weapon = "pokeball"; break;
     }
     this.events.push({ type: "itemPicked", playerId: p.id, itemType: item.type });
   }
@@ -299,7 +360,7 @@ export class GameSim {
   }
 
   /** 火焰/闪电压到某一格的共有逻辑 */
-  private applyCellHit(c: Vec, exploded: Set<number> | null, source: "exploded" | "lightningStrike"): void {
+  private applyCellHit(c: Vec, exploded: Set<number> | null, source: "exploded" | "lightningStrike" | "laser"): void {
     const i = c.gy * GRID_W + c.gx;
     const existingItem = this.items.get(i); // 火焰烧毁的是爆炸前就存在的道具
     if (isSoft(this.grid[i])) {
@@ -329,21 +390,19 @@ export class GameSim {
         }
       }
     }
+    const cause = source === "lightningStrike" ? "lightning" : source === "laser" ? "laser" : "explosion";
     for (const p of this.players.values()) {
       if (
         p.alive &&
-        this.elapsedMs >= p.invincibleUntil &&
-        !(source === "lightningStrike" && p.rodOn) && // 避雷针免疫闪电
         Math.round(p.x) === c.gx &&
         Math.round(p.y) === c.gy
       ) {
-        p.alive = false;
-        this.events.push({ type: "died", playerId: p.id, gx: c.gx, gy: c.gy });
+        this.killPlayer(p, cause);
       }
     }
   }
 
-  /** 软墙被烧毁后的掉落：对应天气有概率掉天气专属道具 */
+  /** 软墙被烧毁后的掉落：天气专属道具 + 稀有装置 + 经典三件 */
   private rollDrop(): ItemType | null {
     if (this.weather !== "sunny" && this.rng() < WEATHER_ITEM_RATE) {
       switch (this.weather) {
@@ -353,6 +412,17 @@ export class GameSim {
       }
     }
     if (this.rng() >= ITEM_DROP_RATE) return null;
+    const gadget = this.rng();
+    if (gadget < 0.2) {
+      // 稀有装置（占掉落总量的 6%）
+      const rare = this.rng();
+      if (rare < 0.17) return ItemType.Vehicle;
+      if (rare < 0.34) return ItemType.Portal;
+      if (rare < 0.5) return ItemType.Laser;
+      if (rare < 0.67) return ItemType.Pistol;
+      if (rare < 0.84) return ItemType.Shield;
+      return ItemType.Pokeball;
+    }
     const roll = this.rng();
     return roll < 1 / 3 ? ItemType.Bomb : roll < 2 / 3 ? ItemType.Flame : ItemType.Speed;
   }
@@ -395,10 +465,183 @@ export class GameSim {
     this.explosions = this.explosions.filter(e => e.expireAt > this.elapsedMs);
   }
 
+  /** 使用当前武器（激光剑/手枪/精灵球；盾牌为被动） */
+  attack(playerId: string): void {
+    const p = this.players.get(playerId);
+    if (!p || !p.alive || this.phase === "ended") return;
+    if (this.elapsedMs < p.attackReadyAt) return;
+    if (p.weapon === "laser") {
+      p.attackReadyAt = this.elapsedMs + LASER_COOLDOWN;
+      const d: Dir = p.facing ?? "down";
+      const cells: Vec[] = [];
+      let x = Math.round(p.x);
+      let y = Math.round(p.y);
+      for (let r = 1; r <= LASER_RANGE; r++) {
+        x += dirDx(d);
+        y += dirDy(d);
+        if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) break;
+        if (this.grid[y * GRID_W + x] === Tile.HardWall) break;
+        cells.push({ gx: x, gy: y });
+      }
+      this.events.push({ type: "laser", ownerId: p.id, cells });
+      for (const c of cells) {
+        this.applyCellHit(c, null, "laser");
+        for (const t of this.players.values()) {
+          if (t.id !== p.id && t.alive && Math.round(t.x) === c.gx && Math.round(t.y) === c.gy) {
+            this.killPlayer(t, "laser");
+          }
+        }
+      }
+    } else if (p.weapon === "pistol") {
+      p.attackReadyAt = this.elapsedMs + PISTOL_COOLDOWN;
+      const d: Dir = p.facing ?? "down";
+      this.bullets.push({
+        id: this.nextId++, x: p.x, y: p.y,
+        dx: dirDx(d), dy: dirDy(d), ownerId: p.id, traveled: 0,
+      });
+    } else if (p.weapon === "pokeball") {
+      p.attackReadyAt = this.elapsedMs + CAPTURE_MS;
+      let best: SimPlayer | null = null;
+      let bestD = CAPTURE_RANGE;
+      for (const t of this.players.values()) {
+        if (t.id === p.id || !t.alive) continue;
+        const d = Math.hypot(t.x - p.x, t.y - p.y);
+        if (d <= bestD) { bestD = d; best = t; }
+      }
+      if (best) {
+        best.trappedUntil = this.elapsedMs + CAPTURE_MS; // 5 秒后自动出来
+        best.dir = null;
+      }
+    }
+  }
+
+  /** 统一击杀流程：载具挡一命 → 无敌帧/避雷针 → 生命 -1 → 安排复活 */
+  private killPlayer(p: SimPlayer, cause: "explosion" | "lightning" | "monster" | "laser" | "pistol" | "forfeit"): void {
+    if (!p.alive) return;
+    // 载具替玩家挨一下：被打下来掉在原地，别人可以捡走
+    if (p.mounted && cause !== "forfeit") {
+      p.mounted = false;
+      this.dropItemAt(Math.round(p.x), Math.round(p.y), ItemType.Vehicle);
+      p.invincibleUntil = this.elapsedMs + 1_200;
+      return;
+    }
+    if (cause !== "forfeit") {
+      if (this.elapsedMs < p.invincibleUntil) return;
+      if (cause === "lightning" && p.rodOn) return;
+    }
+    p.alive = false;
+    p.lives = Math.max(0, p.lives - 1);
+    p.respawnAt = p.lives > 0 ? this.elapsedMs + RESPAWN_MS : 0;
+    this.events.push({ type: "died", playerId: p.id, gx: Math.round(p.x), gy: Math.round(p.y) });
+  }
+
+  private dropItemAt(gx: number, gy: number, type: ItemType): void {
+    const spot = this.isCellFree(gx, gy)
+      ? { gx, gy }
+      : [{ gx: gx + 1, gy }, { gx: gx - 1, gy }, { gx, gy: gy + 1 }, { gx, gy: gy - 1 }]
+          .find(c => c.gy >= 0 && c.gy < GRID_H && c.gx >= 0 && c.gx < GRID_W && this.grid[c.gy * GRID_W + c.gx] === Tile.Floor);
+    if (!spot) return;
+    this.items.set(spot.gy * GRID_W + spot.gx, { id: this.nextId++, gx: spot.gx, gy: spot.gy, type });
+  }
+
+  private stepRespawns(): void {
+    for (const p of this.players.values()) {
+      if (p.alive || p.lives <= 0 || p.respawnAt === 0 || this.elapsedMs < p.respawnAt) continue;
+      const s = SPAWNS[p.spawnIndex % 4];
+      p.x = s.gx; p.y = s.gy; p.fromX = s.gx; p.fromY = s.gy;
+      p.progress = 0; p.dir = null; p.input = "none";
+      p.alive = true;
+      p.invincibleUntil = this.elapsedMs + RESPAWN_INVINCIBLE_MS;
+      p.trappedUntil = 0;
+      p.respawnAt = 0;
+    }
+  }
+
+  private stepBullets(dtMs: number): void {
+    for (const b of this.bullets) {
+      const stepLen = (PISTOL_SPEED * dtMs) / 1000;
+      const sub = Math.ceil(stepLen); // 细分步进避免穿透
+      for (let i = 0; i < sub; i++) {
+        b.x += (b.dx * stepLen) / sub;
+        b.y += (b.dy * stepLen) / sub;
+        b.traveled += stepLen / sub;
+        const gx = Math.round(b.x);
+        const gy = Math.round(b.y);
+        if (gx < 0 || gx >= GRID_W || gy < 0 || gy >= GRID_H) { b.traveled = PISTOL_RANGE + 1; break; }
+        if (this.grid[gy * GRID_W + gx] !== Tile.Floor) { b.traveled = PISTOL_RANGE + 1; break; }
+        if (this.houseBlock.has(gy * GRID_W + gx)) { b.traveled = PISTOL_RANGE + 1; break; }
+        let stop = false;
+        for (const p of this.players.values()) {
+          if (!p.alive || p.id === b.ownerId) continue;
+          if (Math.round(p.x) !== gx || Math.round(p.y) !== gy) continue;
+          if (p.weapon === "shield") {
+            // 盾牌反弹：子弹反向飞行，归属换成持盾者（可以打到原来的人）
+            b.dx *= -1;
+            b.dy *= -1;
+            b.ownerId = p.id;
+          } else {
+            this.killPlayer(p, "pistol");
+            b.traveled = PISTOL_RANGE + 1;
+          }
+          stop = true;
+          break;
+        }
+        if (stop) break;
+        for (const m of this.monsters) {
+          if (m.hp > 0 && Math.round(m.x) === gx && Math.round(m.y) === gy) {
+            m.hp = m.hp > 2 ? m.hp - 2 : 0;
+            if (m.hp === 0) this.monsters = this.monsters.filter(x => x !== m);
+            b.traveled = PISTOL_RANGE + 1;
+            stop = true;
+            break;
+          }
+        }
+        if (stop) break;
+        for (const h of this.houses) {
+          if (!h.destroyed && h.gx === gx && h.gy === gy) {
+            h.hp = h.hp > 2 ? h.hp - 2 : 0;
+            if (h.hp === 0) h.destroyed = true;
+            b.traveled = PISTOL_RANGE + 1;
+            stop = true;
+            break;
+          }
+        }
+        if (stop) break;
+        if (b.traveled > PISTOL_RANGE) break;
+      }
+    }
+    this.bullets = this.bullets.filter(b => b.traveled <= PISTOL_RANGE);
+  }
+
+  private stepPortals(): void {
+    this.portalPairs = this.portalPairs.filter(pp => pp.until > this.elapsedMs);
+    for (const pp of this.portalPairs) {
+      const cells = [
+        { gx: pp.ax, gy: pp.ay },
+        { gx: pp.bx, gy: pp.by },
+      ];
+      for (const p of this.players.values()) {
+        if (!p.alive || this.elapsedMs < p.portalCdUntil) continue;
+        const pgx = Math.round(p.x);
+        const pgy = Math.round(p.y);
+        const at = cells.findIndex(c => c.gx === pgx && c.gy === pgy);
+        if (at < 0) continue;
+        const dest = cells[1 - at];
+        p.x = dest.gx; p.y = dest.gy;
+        p.fromX = dest.gx; p.fromY = dest.gy;
+        p.progress = 0; p.dir = null;
+        p.portalCdUntil = this.elapsedMs + PORTAL_COOLDOWN;
+        p.invincibleUntil = Math.max(p.invincibleUntil, this.elapsedMs + 1_000);
+      }
+    }
+  }
+
   forfeit(playerId: string): void {
     const p = this.players.get(playerId);
     if (!p || !p.alive || this.phase === "ended") return;
     p.alive = false;
+    p.lives = 0; // 认输 = 放弃剩余生命
+    p.respawnAt = 0;
     this.events.push({ type: "died", playerId, gx: Math.round(p.x), gy: Math.round(p.y) });
     this.checkEnd();
   }
@@ -420,6 +663,27 @@ export class GameSim {
         hp: HOUSE_MAX_HP, maxHp: HOUSE_MAX_HP, destroyed: false,
       });
     }
+  }
+
+  /** 穿梭胶囊：在两只随机空格生成一对互相连通的胶囊（25 秒后消失） */
+  private spawnPortalPair(): void {
+    const free: number[] = [];
+    for (let gy = 1; gy < GRID_H - 1; gy++)
+      for (let gx = 1; gx < GRID_W - 1; gx++) {
+        const i = gy * GRID_W + gx;
+        if (this.grid[i] === Tile.Floor && !this.houseBlock.has(i)) free.push(i);
+      }
+    if (free.length < 2) return;
+    const pick = () => free.splice(Math.floor(this.rng() * free.length), 1)[0];
+    const a = pick();
+    // 胶囊 B 离 A 至少 5 格
+    let b = a;
+    for (let tries = 0; tries < 20 && Math.abs(Math.floor(b / GRID_W) - Math.floor(a / GRID_W)) + Math.abs((b % GRID_W) - (a % GRID_W)) < 5; tries++) {
+      b = free[Math.floor(this.rng() * free.length)] ?? a;
+    }
+    const ax = a % GRID_W, ay = Math.floor(a / GRID_W);
+    const bx = b % GRID_W, by = Math.floor(b / GRID_W);
+    this.portalPairs.push({ id: this.nextId++, ax, ay, bx, by, until: this.elapsedMs + PORTAL_TTL });
   }
 
   /** 搜集期开局：在地图上散落道具供玩家搜集 */
@@ -524,19 +788,19 @@ export class GameSim {
         }
       }
       if (m.state === "heal") continue; // 屋内安心回血
-      // 攻击：与玩家同格即击杀（无敌帧可躲）
+      // 攻击：与玩家同格即击杀（无敌帧可躲；载具会被打掉）
+      const before = this.monsters.length;
       for (const p of this.players.values()) {
         if (
           p.alive &&
-          this.elapsedMs >= p.invincibleUntil &&
           Math.round(p.x) === Math.round(m.x) &&
           Math.round(p.y) === Math.round(m.y)
         ) {
-          p.alive = false;
-          this.events.push({ type: "died", playerId: p.id, gx: Math.round(p.x), gy: Math.round(p.y) });
-          // 怪物杀死玩家 → 场上再刷一只
-          this.spawnMonster();
+          this.killPlayer(p, "monster");
         }
+      }
+      if (this.monsters.length < before || this.monsters.length < MONSTER_MAX_COUNT) {
+        if (this.monsters.length < before) this.spawnMonster(); // 杀死玩家 → 多刷一只
       }
       // 选择方向
       const target = this.monsterTarget(m);
@@ -643,14 +907,16 @@ export class GameSim {
   }
 
   protected checkEnd(): void {
-    const alive = [...this.players.values()].filter(p => p.alive);
+    // 还有待复活的玩家时不结算
+    if (this.players.size >= 2 && [...this.players.values()].some(p => p.lives > 0 && !p.alive && p.respawnAt > 0)) return;
+    const contenders = [...this.players.values()].filter(p => p.alive || p.lives > 0);
     if (this.gameType === "adventure") {
-      // 冒险模式：消灭全部怪物 = 胜利；全员阵亡 = 失败
+      // 冒险模式：消灭全部怪物 = 胜利；全员生命耗尽 = 失败
       if (this.phase === "playing" && this.monsters.length === 0) {
         this.phase = "ended";
-        this.winnerIds = alive.map(p => p.id);
+        this.winnerIds = contenders.map(p => p.id);
         this.events.push({ type: "ended", winnerIds: this.winnerIds });
-      } else if (alive.length === 0) {
+      } else if (contenders.length === 0) {
         this.phase = "ended";
         this.winnerIds = [];
         this.events.push({ type: "ended", winnerIds: [] });
@@ -658,9 +924,9 @@ export class GameSim {
       return;
     }
     if (this.players.size < 2) return; // 单人练习模式不结算
-    if (alive.length <= 1) {
+    if (contenders.length <= 1) {
       this.phase = "ended";
-      this.winnerIds = alive.map(p => p.id);
+      this.winnerIds = contenders.filter(p => p.alive).map(p => p.id);
       this.events.push({ type: "ended", winnerIds: this.winnerIds });
     }
   }

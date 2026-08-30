@@ -1,4 +1,4 @@
-type SfxName = "bomb" | "explode" | "pickup" | "die" | "win" | "lose" | "thunder";
+type SfxName = "bomb" | "explode" | "pickup" | "die" | "win" | "lose" | "thunder" | "laser";
 
 let ctx: AudioContext | null = null;
 function audio(): AudioContext {
@@ -32,6 +32,7 @@ export const sfx = {
         case "die": beep(400, 0.5, "square", 0.2, 60); break;
         case "win": beep(523, 0.15, "triangle"); setTimeout(() => beep(659, 0.3, "triangle"), 150); break;
         case "lose": beep(220, 0.4, "sawtooth", 0.2, 110); break;
+        case "laser": beep(880, 0.18, "sawtooth", 0.15, 220); break;
         case "thunder":
           // 低频轰鸣 + 快速衰减，模拟雷声
           beep(60, 0.9, "sawtooth", 0.3, 30);

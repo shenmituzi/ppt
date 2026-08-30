@@ -10,6 +10,8 @@ const KEY_DIR: Record<string, Dir> = {
 export interface InputHandlers {
   onDir(d: Dir | "none"): void;
   onBomb(): void;
+  /** 武器攻击（激光剑/手枪/精灵球；无武器时无效） */
+  onAttack(): void;
 }
 
 /** 后按下的方向优先（栈顶）；松开后回退到上一个仍按住的方向 */
@@ -31,6 +33,10 @@ export function attachInput(handlers: InputHandlers): void {
     if (e.code === "Space") {
       e.preventDefault();
       if (!e.repeat) handlers.onBomb();
+    }
+    if (e.code === "KeyJ" || e.code === "Enter") {
+      e.preventDefault();
+      if (!e.repeat) handlers.onAttack();
     }
   });
 
@@ -56,6 +62,7 @@ export function makeInputHub(): InputHub {
   attachInput({
     onDir: d => handlers?.onDir(d),
     onBomb: () => handlers?.onBomb(),
+    onAttack: () => handlers?.onAttack(),
   });
   return {
     setHandlers: h => (handlers = h),

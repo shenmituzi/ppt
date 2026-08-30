@@ -30,7 +30,8 @@ export function createTouchControls(hub: InputHub): void {
     <div id="joy-zone">
       <div id="joy-base" class="hidden"><div id="joy-knob"></div></div>
     </div>
-    <div id="bomb-btn">💣</div>`;
+    <div id="bomb-btn">💣</div>
+    <div id="atk-btn">⚔️</div>`;
   document.getElementById("app")!.appendChild(layer);
   // 长按不弹系统菜单
   layer.addEventListener("contextmenu", e => e.preventDefault());
@@ -97,5 +98,9 @@ export function createTouchControls(hub: InputHub): void {
   document.getElementById("bomb-btn")!.addEventListener("pointerdown", e => {
     e.preventDefault();
     hub.getHandlers()?.onBomb();
+  });
+  document.getElementById("atk-btn")!.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    hub.getHandlers()?.onAttack();
   });
 }
