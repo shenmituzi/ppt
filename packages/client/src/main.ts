@@ -5,6 +5,7 @@ import { simToFrame, OnlineFrameBuilder, type FrameData } from "./render/frame";
 import type { Room } from "colyseus.js";
 import { saveReconnect, tryReconnect } from "./net";
 import { initLobby } from "./lobby";
+import { sfx } from "./sfx";
 
 function showScreen(id: string) {
   for (const el of document.querySelectorAll(".screen")) el.classList.add("hidden");
@@ -23,6 +24,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   const ghosts = new Map<string, GhostView>();
   let last = performance.now();
   let prevAlive = new Set<string>(); // 上一帧仍存活的角色
+  let prevBombs = 0, prevFlames = 0, prevItems = 0; // 差量音效基准
 
   function loop(now: number) {
     const dt = Math.min(50, now - last);
@@ -38,6 +40,15 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     }
     prevAlive = aliveNow;
 
+    // 差量音效（两种模式共用：放泡/爆炸/拾取/死亡）
+    if (f.bombs.length > prevBombs) sfx.play("bomb");
+    if (f.flames.length > prevFlames) sfx.play("explode");
+    if (f.items.length < prevItems) sfx.play("pickup");
+    if (aliveNow.size < prevAlive.size) sfx.play("die");
+    prevBombs = f.bombs.length;
+    prevFlames = f.flames.length;
+    prevItems = f.items.length;
+
     renderer.draw(f, now, [...ghosts.values()]);
 
     // HUD
@@ -49,6 +60,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     // 结算
     if (f.phase === "ended" && overlay.classList.contains("hidden")) {
       const win = f.winnerIds.includes(myId);
+      sfx.play(win ? "win" : "lose");
       overlay.innerHTML = f.winnerIds.length
         ? `<div>${win ? "🏆 胜利！" : "💥 失败"}</div><button onclick="location.reload()">返回大厅</button>`
         : `<div>🤝 平局</div><button onclick="location.reload()">返回大厅</button>`;
