@@ -12,6 +12,7 @@ export function quickMatch(mode: 2 | 4): Promise<Room> {
 /** 创建房间；房间号由服务器通过 code 消息回发给房主 */
 export async function createRoom(): Promise<{ room: Room; code: string }> {
   const room = await colyseus.create("game", {});
+  room.send("code"); // 向服务器询问房间号
   const code = await new Promise<string>(resolve => {
     const timer = setTimeout(() => resolve(""), 3000);
     room.onMessage("code", (c: string) => {
@@ -32,17 +33,20 @@ export async function joinByCode(code: string): Promise<Room> {
 
 /** 保存重连令牌（对局中刷新页面后可回到原对局） */
 export function saveReconnect(room: Room) {
-  sessionStorage.setItem("pt-rejoin", JSON.stringify({ roomId: room.roomId, sessionId: room.sessionId }));
+  sessionStorage.setItem(
+    "pt-rejoin",
+    JSON.stringify({ roomId: room.roomId, token: room.reconnectionToken }),
+  );
   room.onLeave.once(() => sessionStorage.removeItem("pt-rejoin"));
 }
 
-/** 尝试重连上次的对局 */
+/** 尝试重连上次的对局（服务器 allowReconnection 窗口 30 秒内有效） */
 export async function tryReconnect(): Promise<Room | null> {
   const raw = sessionStorage.getItem("pt-rejoin");
   if (!raw) return null;
   try {
-    const { roomId, sessionId } = JSON.parse(raw);
-    return await colyseus.reconnect(roomId, sessionId);
+    const { token } = JSON.parse(raw);
+    return await colyseus.reconnect(token);
   } catch {
     sessionStorage.removeItem("pt-rejoin");
     return null;

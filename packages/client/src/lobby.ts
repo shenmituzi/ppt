@@ -9,14 +9,16 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
   const status = document.getElementById("lobby-status")!;
   const nickname = document.getElementById("nickname") as HTMLInputElement;
   nickname.value = localStorage.getItem("pt-name") || "";
-  nickname.addEventListener("change", () => localStorage.setItem("pt-name", nickname.value.trim()));
+  // input 事件：无论手输还是程序填充都能及时保存
+  nickname.addEventListener("input", () => localStorage.setItem("pt-name", nickname.value.trim()));
 
   const say = (s: string) => (status.textContent = s);
   const guard = (fn: () => Promise<void>) =>
     fn().catch(e => say(`❌ ${e instanceof Error ? e.message : String(e)}`));
 
-  /** 监听房间进入 playing → 进入游戏画面 */
+  /** 监听房间进入 playing → 进入游戏画面；进房即报昵称 */
   function watchAndEnter(room: GameRoom) {
+    room.send("setName", localStorage.getItem("pt-name") || "无名氏");
     const check = () => {
       if (room.state.phase === "playing") onEnter(room);
     };
