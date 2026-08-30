@@ -41,6 +41,9 @@ export interface HouseView {
   id: string; gx: number; gy: number;
   hp: number; maxHp: number; destroyed: boolean;
 }
+export interface DeviceView {
+  id: string; type: string; gx: number; gy: number;
+}
 
 export interface FrameData {
   grid: Uint8Array;
@@ -52,6 +55,8 @@ export interface FrameData {
   strikes: StrikeView[];
   monsters: MonsterView[];
   houses: HouseView[];
+  devices: DeviceView[];
+  sun: number;
   bullets: BulletView[];
   portals: PortalPairView[];
   beams: BeamView[];
@@ -89,7 +94,10 @@ export function simToFrame(sim: GameSim): FrameData {
       weapon: p.weapon,
       mounted: p.mounted,
       trapped: sim.elapsedMs < p.trappedUntil,
+      sun: p.sun,
+      mushroomLv: p.mushroomLv,
     })),
+    devices: sim.devices.map(d => ({ id: String(d.id), type: d.type, gx: d.gx, gy: d.gy })),
     bombs: sim.bombs.map(b => ({
       id: String(b.id), gx: b.gx, gy: b.gy, fuse: Math.max(0, b.explodeAt - sim.elapsedMs),
     })),
@@ -117,6 +125,7 @@ export function simToFrame(sim: GameSim): FrameData {
       id: String(h.id), gx: h.gx, gy: h.gy,
       hp: h.hp, maxHp: h.maxHp, destroyed: h.destroyed,
     })),
+    sun: [...sim.players.values()].reduce((acc, p) => acc + p.sun, 0),
     elapsedMs: sim.elapsedMs,
     gatherEndsAt: sim.gatherEndsAt,
     suddenDeathAt: SUDDEN_DEATH_AT_MS,
@@ -170,7 +179,9 @@ export class OnlineFrameBuilder {
     }
     const smoothK = 1 - Math.exp(-dtMs / 90);
     const players: PlayerView[] = [];
+    let me: PlayerStateView | undefined;
     s.players.forEach((p: PlayerStateView, id: string) => {
+      if (id === this.room.sessionId) me = p;
       let d = this.disp.get(id);
       if (!d) {
         d = { x: p.x, y: p.y };
@@ -226,6 +237,8 @@ export class OnlineFrameBuilder {
     s.houses.forEach((h: any) => houses.push({
       id: h.id, gx: h.gx, gy: h.gy, hp: h.hp, maxHp: h.maxHp, destroyed: h.destroyed,
     }));
+    const devices: DeviceView[] = [];
+    s.devices.forEach((d: any) => devices.push({ id: d.id, type: d.type, gx: d.gx, gy: d.gy }));
     return {
       grid: this.gridData,
       players,
@@ -234,6 +247,8 @@ export class OnlineFrameBuilder {
       items,
       monsters,
       houses,
+      devices,
+      sun: me ? me.sun : 0,
       bullets,
       portals,
       beams: this.beams.filter(bm => nowMs - bm.at < 260),

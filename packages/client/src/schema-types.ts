@@ -6,6 +6,7 @@ export interface PlayerStateView {
   alive: boolean; invincible: boolean; connected: boolean;
   bootsOn: boolean; rodOn: boolean; lanternOn: boolean;
   lives: number; weapon: string; mounted: boolean; trapped: boolean;
+  sun: number; mushroomLv: number;
 }
 export interface MonsterStateView {
   id: string; x: number; y: number;
@@ -14,6 +15,9 @@ export interface MonsterStateView {
 export interface HouseStateView {
   id: string; gx: number; gy: number;
   hp: number; maxHp: number; destroyed: boolean;
+}
+export interface DeviceStateView {
+  id: string; type: string; gx: number; gy: number;
 }
 export interface GameRoomStateView {
   phase: "waiting" | "gathering" | "playing" | "ended";
@@ -29,6 +33,7 @@ export interface GameRoomStateView {
   items: Map<string, { id: string; gx: number; gy: number; type: number }>;
   monsters: Map<string, MonsterStateView>;
   houses: Map<string, HouseStateView>;
+  devices: Map<string, DeviceStateView>;
   bullets: Map<string, { id: string; x: number; y: number }>;
   portals: Map<string, { id: string; ax: number; ay: number; bx: number; by: number; remainingMs: number }>;
   winnerIds: string[];

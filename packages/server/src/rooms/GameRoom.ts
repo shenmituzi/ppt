@@ -1,6 +1,7 @@
 import type { Client } from "colyseus";
 import {
-  GameSim, SUDDEN_DEATH_AT_MS, WEATHERS, type DirInput, type WeatherType, type GameType,
+  GameSim, SUDDEN_DEATH_AT_MS, WEATHERS, pickAdventureWeather,
+  type DirInput, type WeatherType, type GameType,
 } from "@pt/shared";
 import { Room } from "../interop";
 import { BotBrain } from "../bots";
@@ -67,6 +68,11 @@ export class GameRoom extends Room<GameRoomState> {
     this.onMessage("attack", client => {
       this.sim?.attack(client.sessionId);
     });
+    this.onMessage("buy", (client, data: { itemId?: string }) => {
+      if (!this.sim || !data?.itemId) return;
+      const res = this.sim.buy(client.sessionId, data.itemId);
+      client.send("buyResult", { itemId: data.itemId, ...res });
+    });
   }
 
   onJoin(client: Client) {
@@ -118,7 +124,10 @@ export class GameRoom extends Room<GameRoomState> {
     if (this.state.phase !== "waiting") return;
     // 经典对战必须 >=2 名真人；冒险模式不足 5 人由人机补位
     if (this.gameType === "pvp" && this.clients.length < 2) return;
-    const weather: WeatherType = WEATHERS[(Math.random() * WEATHERS.length) | 0];
+    // 冒险模式天气概率不同（迷雾很稀有）
+    const weather: WeatherType = this.gameType === "adventure"
+      ? pickAdventureWeather(Math.random)
+      : WEATHERS[(Math.random() * WEATHERS.length) | 0];
     if (this.gameType === "adventure") {
       const missing = this.maxClients - this.joinOrder.length;
       for (let i = 0; i < missing; i++) {

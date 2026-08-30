@@ -22,6 +22,15 @@ export class PlayerState extends Schema {
   @type("string") weapon = "none";
   @type("boolean") mounted = false;
   @type("boolean") trapped = false;
+  @type("uint16") sun = 0;
+  @type("uint8") mushroomLv = 1;
+}
+
+export class DeviceState extends Schema {
+  @type("string") id = "";
+  @type("string") type = "cannon";
+  @type("int8") gx = 0;
+  @type("int8") gy = 0;
 }
 
 export class BulletState extends Schema {
@@ -100,5 +109,6 @@ export class GameRoomState extends Schema {
   @type({ map: HouseState }) houses = new MapSchema<HouseState>();
   @type({ map: BulletState }) bullets = new MapSchema<BulletState>();
   @type({ map: PortalState }) portals = new MapSchema<PortalState>();
+  @type({ map: DeviceState }) devices = new MapSchema<DeviceState>();
   @type(["string"]) winnerIds = new ArraySchema<string>();
 }

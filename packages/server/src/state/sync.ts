@@ -1,7 +1,7 @@
 import { GameSim } from "@pt/shared";
 import {
   GameRoomState, PlayerState, BombState, FlameState, ItemState,
-  MonsterState, HouseState, BulletState, PortalState,
+  MonsterState, HouseState, BulletState, PortalState, DeviceState,
 } from "./GameRoomState";
 
 export function gridToString(grid: Uint8Array): string {
@@ -38,6 +38,8 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
     ps.weapon = p.weapon;
     ps.mounted = p.mounted;
     ps.trapped = sim.elapsedMs < p.trappedUntil;
+    ps.sun = p.sun;
+    ps.mushroomLv = p.mushroomLv;
   }
 
   const bombIds = new Set<string>();
@@ -150,6 +152,23 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
   }
   for (const key of [...state.portals.keys()]) {
     if (!portalIds.has(key)) state.portals.delete(key);
+  }
+  const deviceIds = new Set<string>();
+  for (const d of sim.devices) {
+    const key = String(d.id);
+    deviceIds.add(key);
+    let ds = state.devices.get(key);
+    if (!ds) {
+      ds = new DeviceState();
+      ds.id = key;
+      ds.type = d.type;
+      ds.gx = d.gx;
+      ds.gy = d.gy;
+      state.devices.set(key, ds);
+    }
+  }
+  for (const key of [...state.devices.keys()]) {
+    if (!deviceIds.has(key)) state.devices.delete(key);
   }
   const houseIds = new Set<string>();
   for (const h of sim.houses) {

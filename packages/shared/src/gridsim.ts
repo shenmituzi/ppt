@@ -7,7 +7,12 @@ import {
   MONSTER_BASE_HP, MONSTER_HP_PER_LEVEL, MONSTER_BASE_SPEED, MONSTER_SPEED_PER_LEVEL,
   MONSTER_MAX_SPEED, MONSTER_MAX_COUNT, HOUSE_MAX_HP, HOUSE_HEAL_PER_SEC,
   MONSTER_RETREAT_RATIO, BUFF_DECAY_MS,
+  MUSHROOM_SUN_PERIOD, SUN_PER_MONSTER, CANNON_RANGE, CANNOW_DAMAGE, CANNON_COOLDOWN,
+  FAN_RANGE, FAN_SLOW, FRIDGE_RANGE, FRIDGE_SLOW,
+  MONSTER_MAX_LEVEL, MONSTER_LEVEL_MS,
+  ADVENTURE_WEATHER, pickAdventureWeather,
   PLAYER_LIVES, RESPAWN_MS, RESPAWN_INVINCIBLE_MS, MOUNT_SPEED_FACTOR,
+  SHOP,
   LASER_RANGE, LASER_COOLDOWN, PISTOL_COOLDOWN, PISTOL_SPEED, PISTOL_RANGE,
   PORTAL_TTL, PORTAL_COOLDOWN, CAPTURE_RANGE, CAPTURE_MS,
   SPAWNS,
@@ -57,6 +62,12 @@ export interface SimPlayer {
   trappedUntil: number;
   /** 穿梭胶囊冷却 */
   portalCdUntil: number;
+  /** 冒险模式：阳光（商城货币） */
+  sun: number;
+  /** 蘑菇数量（每颗定期产阳光） */
+  mushroomLv: number;
+  /** 下一次蘑菇产阳光时间 */
+  nextSunAt: number;
 }
 
 export interface SimBomb {
@@ -131,6 +142,15 @@ export interface SimHouse {
   destroyed: boolean;
 }
 
+export interface SimDevice {
+  id: number;
+  type: "cannon" | "fan" | "fridge";
+  gx: number;
+  gy: number;
+  ownerId: string;
+  cdUntil: number;
+}
+
 export interface GameSimOpts {
   gameType?: GameType;
 }
@@ -154,6 +174,7 @@ export class GameSim {
   monsters: SimMonster[] = [];
   bullets: SimBullet[] = [];
   portalPairs: SimPortalPair[] = [];
+  devices: (SimDevice & { flashUntil?: number })[] = [];
 
   protected events: GameEvent[] = [];
   protected rng: () => number;
@@ -190,6 +211,7 @@ export class GameSim {
         lives: PLAYER_LIVES, respawnAt: 0, mounted: false,
         weapon: "none", attackReadyAt: 0, facing: null,
         trappedUntil: 0, portalCdUntil: 0,
+        sun: 0, mushroomLv: 1, nextSunAt: MUSHROOM_SUN_PERIOD,
       });
     });
     if (this.gameType === "adventure") {
@@ -238,11 +260,130 @@ export class GameSim {
     }
     if (this.gameType === "adventure") {
       if (this.phase === "gathering" && this.elapsedMs >= this.gatherEndsAt) this.startHunt();
+      this.stepSun(dtMs);
+      this.stepDevices(dtMs);
       this.stepMonsters(dtMs);
       this.stepDecay();
     }
     this.stepSuddenDeath();
     this.checkEnd();
+  }
+
+  /** 冒险模式：蘑菇产阳光 + 怪物死亡掉阳光由伤害来源结算 */
+  private stepSun(dtMs: number): void {
+    for (const p of this.players.values()) {
+      p.nextSunAt = p.nextSunAt ?? this.elapsedMs + MUSHROOM_SUN_PERIOD;
+      while (this.elapsedMs >= p.nextSunAt) {
+        p.nextSunAt += MUSHROOM_SUN_PERIOD;
+        p.sun += p.mushroomLv; // 每颗蘑菇 +1
+      }
+    }
+  }
+
+  /** 购买商城道具（服务器校验价格后调用）；返回是否成功与文案 */
+  buy(playerId: string, itemId: string): { ok: boolean; message: string } {
+    const entry = SHOP.find(x => x.id === itemId);
+    const p = this.players.get(playerId);
+    if (!entry || !p || !p.alive) return { ok: false, message: "无法购买" };
+    if (p.sun < entry.price) return { ok: false, message: "阳光不足" };
+    p.sun -= entry.price;
+    if (itemId === "bomb") p.bombsMax = Math.min(MAX_BOMBS, p.bombsMax + 1);
+    else if (itemId === "flame") p.flameLen = Math.min(MAX_FLAMES, p.flameLen + 1);
+    else if (itemId === "speed") p.speedLevel = Math.min(MAX_SPEED_LEVEL, p.speedLevel + 1);
+    else if (itemId === "mushroom") p.mushroomLv += 1;
+    else if (itemId === "cannon" || itemId === "fan" || itemId === "fridge") {
+      this.placeDevice(itemId, p);
+    } else if (itemId === "blindbox") {
+      const message = this.openBlindbox(p);
+      return { ok: true, message };
+    }
+    return { ok: true, message: `已购买 ${entry.name}` };
+  }
+
+  /** 盲盒：随机开出道具 / 装置 / 阳光 / 谢谢惠顾 */
+  private openBlindbox(p: SimPlayer): string {
+    const roll = this.rng();
+    if (roll < 0.2) {
+      // 经典三件
+      const t = this.rng();
+      if (t < 1 / 3) { p.bombsMax = Math.min(MAX_BOMBS, p.bombsMax + 1); return "开出了 泡泡+1！"; }
+      if (t < 2 / 3) { p.flameLen = Math.min(MAX_FLAMES, p.flameLen + 1); return "开出了 火焰+1！"; }
+      p.speedLevel = Math.min(MAX_SPEED_LEVEL, p.speedLevel + 1);
+      return "开出了 速度+1！";
+    }
+    if (roll < 0.45) {
+      // 随机装置放在身边
+      const t = this.rng();
+      const type = t < 0.4 ? "cannon" : t < 0.75 ? "fan" : "fridge";
+      const ok = this.placeDevice(type, p);
+      return ok ? `开出了 ${type === "cannon" ? "加农炮" : type === "fan" ? "小风扇" : "冰箱"}！已放置在身边` : "开出了装置，但周围没有空地……";
+    }
+    if (roll < 0.7) { p.sun += 10; return "开出了 10 阳光！"; }
+    if (roll < 0.85) { p.sun += 5; return "开出了 5 阳光"; }
+    return "谢谢惠顾～";
+  }
+
+  /** 在玩家身旁放置装置 */
+  private placeDevice(type: "cannon" | "fan" | "fridge", p: SimPlayer): boolean {
+    const spots = [
+      { gx: Math.round(p.x), gy: Math.round(p.y) },
+      { gx: Math.round(p.x) + 1, gy: Math.round(p.y) },
+      { gx: Math.round(p.x) - 1, gy: Math.round(p.y) },
+      { gx: Math.round(p.x), gy: Math.round(p.y) + 1 },
+      { gx: Math.round(p.x), gy: Math.round(p.y) - 1 },
+    ];
+    const spot = spots.find(c =>
+      c.gx > 0 && c.gx < GRID_W && c.gy > 0 && c.gy < GRID_H &&
+      this.grid[c.gy * GRID_W + c.gx] === Tile.Floor &&
+      !this.houseBlock.has(c.gy * GRID_W + c.gx) &&
+      !this.devices.some(d => d.gx === c.gx && d.gy === c.gy) &&
+      ![...this.items.keys()].some(ik => ik === c.gy * GRID_W + c.gx),
+    );
+    if (!spot) return false;
+    this.devices.push({
+      id: this.nextId++, type, gx: spot.gx, gy: spot.gy,
+      ownerId: p.id, cdUntil: this.elapsedMs,
+    });
+    return true;
+  }
+
+  /** 装置：加农炮自动攻击 / 风扇冰箱减速光环 */
+  private stepDevices(dtMs: number): void {
+    for (const d of this.devices) {
+      if (d.type === "cannon") {
+        if (this.elapsedMs < d.cdUntil) continue;
+        let target: SimMonster | null = null;
+        let bestD = CANNON_RANGE;
+        for (const m of this.monsters) {
+          const dist = Math.hypot(m.x - d.gx, m.y - d.gy);
+          if (dist <= CANNON_RANGE && (bestD === CANNON_RANGE || dist < bestD)) {
+            bestD = dist;
+            target = m;
+          }
+        }
+        if (!target) continue;
+        d.cdUntil = this.elapsedMs + CANNON_COOLDOWN;
+        target.hp -= CANNOW_DAMAGE;
+        d.flashUntil = this.elapsedMs + 200;
+        if (target.hp <= 0) {
+          this.monsters = this.monsters.filter(x => x !== target);
+          const owner = this.players.get(d.ownerId);
+          if (owner) owner.sun += SUN_PER_MONSTER + target.level * 2;
+        }
+      }
+    }
+    // 怪物减速光环在 stepMonsters 内读取设备位置
+    void dtMs;
+  }
+
+  /** 怪物当前移速（考虑风扇/冰箱光环） */
+  private monsterSlowFactor(m: SimMonster): number {
+    let f = 1;
+    for (const d of this.devices) {
+      if (d.type === "fan" && Math.hypot(m.x - d.gx, m.y - d.gy) <= FAN_RANGE) f *= FAN_SLOW;
+      if (d.type === "fridge" && Math.hypot(m.x - d.gx, m.y - d.gy) <= FRIDGE_RANGE) f *= FRIDGE_SLOW;
+    }
+    return f;
   }
 
   /** 供人机 AI 判断格子是否可走（无墙/无泡泡/无房屋） */
@@ -356,11 +497,11 @@ export class GameSim {
     this.explosions.push({ id: this.nextId++, cells, expireAt: this.elapsedMs + FLAME_MS });
     this.events.push({ type: "exploded", cells });
 
-    for (const c of cells) this.applyCellHit(c, exploded, "exploded");
+    for (const c of cells) this.applyCellHit(c, exploded, "exploded", b.ownerId);
   }
 
   /** 火焰/闪电压到某一格的共有逻辑 */
-  private applyCellHit(c: Vec, exploded: Set<number> | null, source: "exploded" | "lightningStrike" | "laser"): void {
+  private applyCellHit(c: Vec, exploded: Set<number> | null, source: "exploded" | "lightningStrike" | "laser", creditId?: string): void {
     const i = c.gy * GRID_W + c.gx;
     const existingItem = this.items.get(i); // 火焰烧毁的是爆炸前就存在的道具
     if (isSoft(this.grid[i])) {
@@ -376,11 +517,22 @@ export class GameSim {
       if (chain) this.explodeBomb(chain, exploded); // 连锁引爆
     }
     if (existingItem) this.items.delete(i);
-    // 怪物受伤（冒险模式）
+    // 怪物受伤（冒险模式）：不同来源伤害不同
+    const mdmg = source === "laser" ? 15 : 10;
     for (const m of this.monsters) {
-      if (m.hp > 0 && Math.round(m.x) === c.gx && Math.round(m.y) === c.gy) m.hp -= 1;
+      if (m.hp > 0 && Math.round(m.x) === c.gx && Math.round(m.y) === c.gy) m.hp -= mdmg;
     }
     this.monsters = this.monsters.filter(m => m.hp > 0);
+    // 击杀奖励阳光归伤害来源
+    for (const m of [...this.monsters]) {
+      if (m.hp <= 0) {
+        this.monsters = this.monsters.filter(x => x !== m);
+        if (creditId) {
+          const owner = this.players.get(creditId);
+          if (owner) owner.sun += SUN_PER_MONSTER + m.level * 2;
+        }
+      }
+    }
     // 怪物房屋受伤（爆炸才能拆，闪电不行）
     if (source === "exploded") {
       for (const h of this.houses) {
@@ -485,7 +637,7 @@ export class GameSim {
       }
       this.events.push({ type: "laser", ownerId: p.id, cells });
       for (const c of cells) {
-        this.applyCellHit(c, null, "laser");
+        this.applyCellHit(c, null, "laser", p.id);
         for (const t of this.players.values()) {
           if (t.id !== p.id && t.alive && Math.round(t.x) === c.gx && Math.round(t.y) === c.gy) {
             this.killPlayer(t, "laser");
@@ -750,11 +902,12 @@ export class GameSim {
 
   private monsterLevel(): number {
     const huntMs = Math.max(0, this.elapsedMs - this.gatherEndsAt);
-    return 1 + Math.floor(huntMs / 45_000);
+    return Math.min(MONSTER_MAX_LEVEL, 1 + Math.floor(huntMs / MONSTER_LEVEL_MS));
   }
 
   private monsterSpeed(m: SimMonster): number {
-    return Math.min(MONSTER_MAX_SPEED, MONSTER_BASE_SPEED + (m.level - 1) * MONSTER_SPEED_PER_LEVEL);
+    const base = Math.min(MONSTER_MAX_SPEED, MONSTER_BASE_SPEED + (m.level - 1) * MONSTER_SPEED_PER_LEVEL);
+    return base * this.monsterSlowFactor(m); // 风扇/冰箱光环减速
   }
 
   private stepMonsters(dtMs: number): void {

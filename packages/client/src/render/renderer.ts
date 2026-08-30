@@ -122,6 +122,13 @@ export class Renderer {
     for (const fl of f.flames) this.drawFlame(fl, nowMs);
     for (const g of ghosts) this.drawGhost(g, nowMs);
     for (const h of f.houses) this.drawHouse(h);
+    // 冒险模式：存活玩家的出生点画产阳光蘑菇
+    if (f.gameType === "adventure") {
+      for (const p of f.players) {
+        if (p.alive) this.drawMushroom(center(p.x), center(p.y) + 4, nowMs, p.colorIndex % 4);
+      }
+    }
+    for (const d of f.devices) this.drawDevice(d, nowMs);
     for (const m of f.monsters) this.drawMonster(m, nowMs);
     for (const p of f.players) this.drawPlayer(p, nowMs);
     // 鸟群本体
@@ -282,6 +289,104 @@ export class Renderer {
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.lineWidth = 1;
+  }
+
+  /** 产阳光的蘑菇：红伞白点 */
+  private drawMushroom(cx: number, cy: number, nowMs: number, colorIdx: number) {
+    const { ctx } = this;
+    const sway = Math.sin(nowMs / 420 + colorIdx) * 0.06;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(sway);
+    ctx.fillStyle = "#f5f5f5";
+    ctx.fillRect(-1.5, 2, 3, 5);
+    ctx.fillStyle = "#e05a5a";
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 7, 5.5, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    for (const [x, y] of [[-4, -1], [0, -3], [4, -1]]) {
+      ctx.beginPath();
+      ctx.arc(x, y, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** 装置：加农炮 / 风扇 / 冰箱 */
+  private drawDevice(d: FrameData["devices"][number], nowMs: number) {
+    const { ctx } = this;
+    const cx = center(d.gx);
+    const cy = center(d.gy);
+    ctx.fillStyle = "rgba(60,90,60,.2)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 10, 11, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (d.type === "cannon") {
+      ctx.fillStyle = "#5a6b52";
+      ctx.beginPath();
+      ctx.arc(cx, cy + 5, 6.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#3f4f3a";
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + 4);
+      ctx.lineTo(cx + 9, cy - 7);
+      ctx.stroke();
+      ctx.fillStyle = "#8ecf7d";
+      ctx.beginPath();
+      ctx.arc(cx, cy + 5, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (d.type === "fan") {
+      ctx.fillStyle = "#e8f4ff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#7fb2d9";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(nowMs / 90);
+      ctx.fillStyle = "#5fa8d9";
+      for (let a = 0; a < 3; a++) {
+        ctx.rotate((Math.PI * 2) / 3);
+        ctx.beginPath();
+        ctx.ellipse(5, 0, 4.5, 2.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      ctx.fillStyle = "#3f4f5a";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const g = ctx.createLinearGradient(cx - 8, 0, cx + 8, 0);
+      g.addColorStop(0, "#e6f4ff");
+      g.addColorStop(1, "#a8d0f0");
+      ctx.fillStyle = g;
+      rr(ctx, cx - 8, cy - 11, 16, 22, 4);
+      ctx.fill();
+      ctx.strokeStyle = "#7fb2d9";
+      ctx.lineWidth = 2;
+      rr(ctx, cx - 8, cy - 11, 16, 22, 4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, cy - 3);
+      ctx.lineTo(cx + 8, cy - 3);
+      ctx.stroke();
+      ctx.fillStyle = "#5a8ab0";
+      ctx.fillRect(cx + 4, cy - 8, 2, 4);
+      ctx.fillStyle = "#ffffff";
+      for (const [x, y] of [[cx - 4, cy + 4], [cx + 3, cy + 6]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
   private drawMonster(m: FrameData["monsters"][number], nowMs: number) {

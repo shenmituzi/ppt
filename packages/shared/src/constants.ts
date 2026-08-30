@@ -114,12 +114,28 @@ export const GATHER_MS = 120_000; // 装备搜集期时长
 
 export const SCATTER_ITEMS = 14; // 开局散落在地图上的道具数
 
-export const MONSTER_BASE_HP = 18;
-export const MONSTER_HP_PER_LEVEL = 8;
+export const MONSTER_BASE_HP = 100;
+export const MONSTER_HP_PER_LEVEL = 30;
+export const MONSTER_MAX_LEVEL = 10;
+export const MONSTER_LEVEL_MS = 60_000; // 每 60 秒升 1 级
 export const MONSTER_BASE_SPEED = 1.7; // 格/秒
 export const MONSTER_SPEED_PER_LEVEL = 0.15;
 export const MONSTER_MAX_SPEED = 3.4;
 export const MONSTER_MAX_COUNT = 9;
+
+// ---------- 冒险经济：蘑菇产阳光 + 商城 ----------
+export const MUSHROOM_SUN_PERIOD = 6_000; // 每颗蘑菇 6 秒产 1 阳光
+export const SUN_PER_MONSTER = 5; // 击杀怪物基础阳光（另加等级 x2）
+export const SUN_PICKUP = 3; // 地图阳光拾取
+
+// 装置（放置后常驻）
+export const CANNON_RANGE = 3; // 格
+export const CANNOW_DAMAGE = 10;
+export const CANNON_COOLDOWN = 3_000;
+export const FAN_RANGE = 4;
+export const FAN_SLOW = 0.6;
+export const FRIDGE_RANGE = 4;
+export const FRIDGE_SLOW = 0.65; // 与风扇叠乘，配合加农炮怪物几乎挪不动
 export const HOUSE_MAX_HP = 12; // 每次爆炸命中 -2
 export const HOUSE_HEAL_PER_SEC = 3;
 export const MONSTER_RETREAT_RATIO = 0.3; // 血量低于 30% 回屋
@@ -139,3 +155,42 @@ export const PORTAL_TTL = 25_000; // 穿梭胶囊存活时间
 export const PORTAL_COOLDOWN = 3_000; // 传送后再次使用间隔
 export const CAPTURE_RANGE = 2.5; // 精灵球捕捉距离（格）
 export const CAPTURE_MS = 5_000; // 困住时长
+
+
+// ---------- 冒险模式天气权重（迷雾很稀有） ----------
+export const ADVENTURE_WEATHER: [WeatherType, number][] = [
+  [Weather.Sunny, 0.5],
+  [Weather.Rain, 0.25],
+  [Weather.Snow, 0.23],
+  [Weather.Fog, 0.02],
+];
+
+export function pickAdventureWeather(rng: () => number): WeatherType {
+  const roll = rng();
+  let acc = 0;
+  for (const [w, weight] of ADVENTURE_WEATHER) {
+    acc += weight;
+    if (roll < acc) return w;
+  }
+  return Weather.Sunny;
+}
+
+// ---------- 商城目录（服务端校验 + 客户端渲染共用） ----------
+export interface ShopEntry {
+  id: string;
+  name: string;
+  icon: string;
+  price: number; // 阳光
+  desc: string;
+}
+
+export const SHOP: ShopEntry[] = [
+  { id: "bomb", name: "泡泡+1", icon: "🫧", price: 8, desc: "同时可放泡泡 +1" },
+  { id: "flame", name: "火焰+1", icon: "🔥", price: 8, desc: "火焰长度 +1" },
+  { id: "speed", name: "速度+1", icon: "👟", price: 10, desc: "移动速度 +1 档" },
+  { id: "cannon", name: "加农炮", icon: "🎯", price: 30, desc: "放置炮台：3 格内自动攻击，每发 10 伤害" },
+  { id: "fan", name: "小风扇", icon: "🌀", price: 20, desc: "放置后 4 格内怪物减速 40%" },
+  { id: "fridge", name: "冰箱", icon: "🧊", price: 25, desc: "放置后 4 格内怪物再减速 35%（配合风扇/加农炮）" },
+  { id: "mushroom", name: "双子蘑菇", icon: "🍄", price: 20, desc: "阳光产出 +1/次" },
+  { id: "blindbox", name: "盲盒", icon: "🎁", price: 15, desc: "随机开出道具、装置、阳光……也可能谢谢惠顾" },
+];

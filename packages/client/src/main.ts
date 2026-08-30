@@ -1,5 +1,5 @@
 import "../style.css";
-import { GameSim, WEATHERS, WEATHER_LABEL, type WeatherType } from "@pt/shared";
+import { GameSim, SHOP, WEATHERS, WEATHER_LABEL, type WeatherType } from "@pt/shared";
 
 // 开发期注册 SW 绕过顽固缓存；生产构建不注册（并清理旧的）
 if (import.meta.env.DEV && "serviceWorker" in navigator) {
@@ -17,6 +17,8 @@ import type { Room } from "colyseus.js";
 import { saveReconnect, tryReconnect } from "./net";
 import { initLobby } from "./lobby";
 import { sfx } from "./sfx";
+import { bgm } from "./bgm";
+import { initShop, shopToast } from "./shop";
 
 function showScreen(id: string) {
   for (const el of document.querySelectorAll(".screen")) el.classList.add("hidden");
@@ -26,7 +28,13 @@ function showScreen(id: string) {
 const hub = makeInputHub();
 createTouchControls(hub); // 触屏设备显示虚拟摇杆 + 炸弹按钮
 
+// 背景音乐：首次交互后启动（浏览器自动播放策略），可在 HUD 关闭
+let bgmOn = true;
+window.addEventListener("pointerdown", () => bgm.start(), { once: true });
+
 /** 游戏画面公共循环：getFrame 每帧产出一个 FrameData（单机/在线共用） */
+let shopBuyHandler: ((itemId: string) => void) | null = null;
+
 function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId: string) {
   showScreen("screen-game");
   const canvas = document.getElementById("game") as HTMLCanvasElement;
@@ -39,13 +47,60 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   hudTime.className = "pill warn";
   const hudWx = document.createElement("span");
   hudWx.className = "pill";
-  hud.replaceChildren(hudWx, hudAlive, hudTime);
+  const hudSun = document.createElement("span");
+  hudSun.className = "pill sun";
+  const hudShop = document.createElement("button");
+  hudShop.className = "pill shop";
+  hudShop.textContent = "🛒 商城";
+  const hudBgm = document.createElement("button");
+  hudBgm.className = "pill shop";
+  hudBgm.textContent = "🔊";
+  let shopOpen = false;
+  hudShop.onclick = () => {
+    shopOpen = !shopOpen;
+    document.getElementById("shop-panel")!.classList.toggle("hidden", !shopOpen);
+    window.dispatchEvent(new Event("shop-refresh"));
+  };
+  hudBgm.onclick = () => {
+    bgmOn = !bgmOn;
+    hudBgm.textContent = bgmOn ? "🔊" : "🔇";
+    if (bgmOn) bgm.start(); else bgm.stop();
+  };
+  hud.replaceChildren(hudWx, hudAlive, hudTime, hudSun, hudShop, hudBgm);
+  window.addEventListener("keydown", e => {
+    if (e.code === "KeyB" && !(e.target instanceof HTMLInputElement)) {
+      hudShop.click();
+    }
+  });
+  let lastFrame: FrameData | null = null;
   const ghosts = new Map<string, GhostView>();
   let last = performance.now();
   let prevAlive = new Set<string>(); // 上一帧仍存活的角色
   let prevBombs = 0, prevFlames = 0, prevItems = 0; // 差量音效基准
+  let lastSunShown = -1;
   const panel = document.getElementById("players-panel")!;
   let lastPanelSig = "";
+  const shopPanel = document.getElementById("shop-panel")!;
+
+  // 商城面板（冒险模式）：购买走 shopBuyHandler，阳光数值从最新帧读取
+  let shopSunShown = -1;
+  function renderShop(sun: number) {
+    if (shopPanel.classList.contains("hidden")) return;
+    if (sun === shopSunShown) return;
+    shopSunShown = sun;
+    const rows = SHOP.map(e => {
+      const afford = sun >= e.price;
+      return `<button class="shop-row" data-id="${e.id}" ${afford ? "" : "disabled"}>
+        <span class="si">${e.icon}</span>
+        <span class="sn">${e.name}<small>${e.desc}</small></span>
+        <span class="sp">☀️ ${e.price}</span>
+      </button>`;
+    }).join("");
+    shopPanel.innerHTML = `<div class="shop-head">☀️ 阳光 ${sun}</div>${rows}`;
+    shopPanel.querySelectorAll("button.shop-row").forEach(btn => {
+      btn.addEventListener("click", () => shopBuyHandler?.(btn.getAttribute("data-id")!));
+    });
+  }
 
   function loop(now: number) {
     const dt = Math.min(50, now - last);
@@ -78,6 +133,14 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     // HUD（三枚信息胶囊：天气 / 存活 / 阶段信息）
     hudWx.textContent = WEATHER_LABEL[f.weather as WeatherType] ?? "☀️ 晴朗";
     hudAlive.textContent = `存活 ${f.players.filter(p => p.alive).length}`;
+    if (f.sun !== lastSunShown) {
+      lastSunShown = f.sun;
+      hudSun.textContent = `☀️ ${f.sun}`;
+      renderShop(f.sun);
+    }
+    // 冒险模式才显示阳光/商城
+    hudSun.classList.toggle("hidden", f.gameType !== "adventure");
+    hudShop.classList.toggle("hidden", f.gameType !== "adventure");
     if (f.phase === "gathering") {
       hudTime.textContent = `🎁 装备搜集 ${Math.max(0, Math.ceil((f.gatherEndsAt - f.elapsedMs) / 1000))}s`;
       hudTime.classList.remove("danger");
@@ -179,6 +242,10 @@ async function enterOnlineGame(room: Room<any>) {
     onDir: d => room.send("dir", { dir: d }),
     onBomb: () => room.send("bomb"),
     onAttack: () => room.send("attack"),
+  });
+  shopBuyHandler = itemId => room.send("buy", { itemId });
+  room.onMessage("buyResult", (res: { ok: boolean; message: string }) => {
+    shopToast(res.ok ? `✅ ${res.message}` : `❌ ${res.message}`);
   });
   const builder = new OnlineFrameBuilder(room);
   room.onMessage("laser", (d: { cells: number[] }) => {
