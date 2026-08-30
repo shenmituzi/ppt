@@ -63,3 +63,70 @@ describe("GameSim 移动", () => {
     expect(sim.players.get("a")!.x).toBeCloseTo(1.7, 5);
   });
 });
+
+describe("GameSim 泡泡与爆炸", () => {
+  it("放泡泡受数量上限约束，同格不能重复放", () => {
+    const sim = makeSim();
+    const a = sim.players.get("a")!;
+    sim.placeBomb("a");
+    expect(sim.bombs).toHaveLength(1);
+    expect(a.bombsActive).toBe(1);
+    sim.placeBomb("a"); // 同格已有泡泡
+    expect(sim.bombs).toHaveLength(1);
+    a.bombsMax = 0;
+    a.bombsActive = 0;
+    sim.setInput("a", "right");
+    sim.step(250); // 走到 (2,1) 离开泡泡格
+    sim.placeBomb("a"); // 上限 0
+    expect(sim.bombs).toHaveLength(1); // 仍是原来那颗
+  });
+
+  it("引信 2500ms：差一点不炸，到点必炸", () => {
+    const sim = makeSim();
+    sim.placeBomb("a");
+    for (let i = 0; i < 24; i++) sim.step(100); // 2400ms
+    expect(sim.bombs).toHaveLength(1);
+    expect(sim.explosions).toHaveLength(0);
+    sim.step(150); // 2550ms
+    expect(sim.bombs).toHaveLength(0);
+    expect(sim.explosions).toHaveLength(1);
+    expect(sim.players.get("a")!.bombsActive).toBe(0);
+  });
+
+  it("火焰长度1：烧毁相邻软墙，硬墙直接挡", () => {
+    const sim = makeSim();
+    sim.grid[idx(3, 1)] = Tile.SoftWall;
+    sim.grid[idx(1, 2)] = Tile.SoftWall;
+    sim.placeBomb("a");
+    for (let i = 0; i < 26; i++) sim.step(100);
+    expect(sim.grid[idx(2, 1)]).toBe(Tile.Floor); // 被烧毁
+    expect(sim.grid[idx(3, 1)]).toBe(Tile.SoftWall); // 未波及
+    expect(sim.grid[idx(1, 2)]).toBe(Tile.Floor); // 被烧毁
+    const keys = sim.explosions[0].cells.map(c => `${c.gx},${c.gy}`);
+    expect(keys).toContain("2,1");
+    expect(keys).not.toContain("3,1");
+  });
+
+  it("连锁：火焰引爆相邻泡泡（即使其引信未到）", () => {
+    const sim = makeSim(["a", "b"]);
+    sim.placeBomb("a"); // (1,1)——先放泡再挪人，泡留在原地
+    const a = sim.players.get("a")!;
+    a.x = 5; a.y = 5; a.fromX = 5; a.fromY = 5; a.dir = null; a.progress = 0;
+    sim.bombs.push({ id: 999, gx: 2, gy: 1, ownerId: "b", power: 3, explodeAt: sim.elapsedMs + 99999 });
+    for (let i = 0; i < 26; i++) sim.step(100);
+    expect(sim.bombs).toHaveLength(0); // 两颗都被引爆
+    expect(sim.explosions.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("爆炸产生 died 事件，火焰持续 500ms 后消失", () => {
+    const sim = makeSim();
+    sim.placeBomb("a"); // a 站在泡泡上
+    for (let i = 0; i < 26; i++) sim.step(100);
+    const events = sim.drainEvents();
+    expect(events.some(e => e.type === "died" && e.playerId === "a")).toBe(true);
+    expect(sim.players.get("a")!.alive).toBe(false);
+    expect(sim.explosions).toHaveLength(1);
+    for (let i = 0; i < 5; i++) sim.step(100); // 又过 500ms
+    expect(sim.explosions).toHaveLength(0);
+  });
+});

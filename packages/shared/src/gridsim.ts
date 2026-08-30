@@ -86,9 +86,20 @@ export class GameSim {
     if (p) p.input = dir;
   }
 
-  /** 放泡泡（Task 6 实现） */
+  /** 放泡泡：在玩家当前所站格放下 */
   placeBomb(playerId: string): void {
-    void playerId;
+    const p = this.players.get(playerId);
+    if (!p || !p.alive || this.phase !== "playing") return;
+    if (p.bombsActive >= p.bombsMax) return;
+    const gx = Math.round(p.x);
+    const gy = Math.round(p.y);
+    if (this.bombAt(gx, gy)) return;
+    this.bombs.push({
+      id: this.nextId++, gx, gy, ownerId: p.id,
+      power: p.flameLen, explodeAt: this.elapsedMs + BOMB_FUSE_MS,
+    });
+    p.bombsActive++;
+    this.events.push({ type: "bombPlaced", gx, gy, ownerId: p.id });
   }
 
   step(dtMs: number): void {
@@ -156,7 +167,48 @@ export class GameSim {
   protected tryPickup(p: SimPlayer): void {
     void p;
   }
-  protected stepBombs(): void {}
+  protected stepBombs(): void {
+    const due = this.bombs.filter(b => b.explodeAt <= this.elapsedMs);
+    const exploded = new Set<number>();
+    for (const b of due) this.explodeBomb(b, exploded);
+  }
+
+  /** 引爆一颗泡泡：火焰、烧墙、连锁、压中者判死 */
+  private explodeBomb(b: SimBomb, exploded: Set<number>): void {
+    if (exploded.has(b.id)) return;
+    exploded.add(b.id);
+    this.bombs = this.bombs.filter(x => x.id !== b.id);
+    const owner = this.players.get(b.ownerId);
+    if (owner) owner.bombsActive = Math.max(0, owner.bombsActive - 1);
+
+    const cells = computeFlame(this.grid, b.gx, b.gy, b.power);
+    this.explosions.push({ id: this.nextId++, cells, expireAt: this.elapsedMs + FLAME_MS });
+    this.events.push({ type: "exploded", cells });
+
+    for (const c of cells) {
+      const i = c.gy * GRID_W + c.gx;
+      if (this.grid[i] === Tile.SoftWall) {
+        this.grid[i] = Tile.Floor;
+        // 道具掉落逻辑 Task 8 填充，先发事件
+        this.events.push({ type: "wallBroken", gx: c.gx, gy: c.gy, item: null });
+      }
+      const chain = this.bombAt(c.gx, c.gy);
+      if (chain) this.explodeBomb(chain, exploded); // 连锁引爆
+      this.items.delete(i); // 火焰烧毁道具（Task 8 前恒为空）
+      for (const p of this.players.values()) {
+        if (
+          p.alive &&
+          this.elapsedMs >= p.invincibleUntil &&
+          Math.round(p.x) === c.gx &&
+          Math.round(p.y) === c.gy
+        ) {
+          p.alive = false;
+          this.events.push({ type: "died", playerId: p.id, gx: c.gx, gy: c.gy });
+        }
+      }
+    }
+  }
+
   protected stepExplosions(): void {
     this.explosions = this.explosions.filter(e => e.expireAt > this.elapsedMs);
   }
@@ -165,5 +217,5 @@ export class GameSim {
 }
 
 // 引用避免未使用告警（后续任务填充对应桩时移除）
-void BOMB_FUSE_MS; void FLAME_MS; void ITEM_DROP_RATE; void SUDDEN_DEATH_STEP_MS;
-void MAX_BOMBS; void MAX_FLAMES; void MAX_SPEED_LEVEL; void ItemType; void computeFlame;
+void ITEM_DROP_RATE; void SUDDEN_DEATH_STEP_MS;
+void MAX_BOMBS; void MAX_FLAMES; void MAX_SPEED_LEVEL; void ItemType;

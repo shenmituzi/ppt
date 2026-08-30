@@ -1,3 +1,5 @@
+import type { ItemType } from "./constants";
+
 export type Dir = "up" | "down" | "left" | "right";
 /** 玩家当前按住的方向；none = 全部松开 */
 export type DirInput = Dir | "none";

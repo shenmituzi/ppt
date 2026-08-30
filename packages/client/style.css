@@ -1,0 +1,27 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1b2430; color: #eee;
+  font-family: "Microsoft YaHei", system-ui, sans-serif;
+  display: flex; justify-content: center; padding-top: 24px;
+}
+.screen.hidden { display: none; }
+#screen-lobby { width: 320px; display: flex; flex-direction: column; gap: 12px; }
+#screen-lobby h1 { text-align: center; }
+#screen-lobby input, #screen-lobby button {
+  padding: 10px; font-size: 16px; border: none; border-radius: 6px;
+}
+#screen-lobby button { background: #4a90d9; color: #fff; cursor: pointer; }
+#screen-lobby .row { display: flex; gap: 8px; }
+#screen-lobby .row input { flex: 1; text-transform: uppercase; }
+#lobby-status { text-align: center; color: #9ab; min-height: 1.5em; }
+#hud { height: 28px; display: flex; gap: 24px; align-items: center; font-size: 15px; }
+#canvas-wrap { position: relative; }
+#game { display: block; }
+#overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,.72);
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 16px; font-size: 28px;
+}
+#overlay.hidden { display: none; }
+#overlay button { padding: 8px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; }
+#hint { margin-top: 8px; color: #889; font-size: 13px; }
