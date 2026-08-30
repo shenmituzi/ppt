@@ -22,11 +22,18 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   const ghosts = new Map<string, GhostView>();
   let last = performance.now();
   let prevAlive = new Set<string>(); // 上一帧仍存活的角色
+  // 调试钩子：后台标签页 rAF 被节流时手动渲染一帧（大厅接管后移除）
+  (window as any).__renderOnce = () => {
+    const now = performance.now();
+    const f = getFrame(Math.min(50, now - last), now);
+    renderer.draw(f, now, [...ghosts.values()]);
+  };
 
   function loop(now: number) {
     const dt = Math.min(50, now - last);
     last = now;
     const f = getFrame(dt, now);
+    (window as any).__lastFrame = f; // 调试句柄（大厅接管后移除）
 
     // 死亡瞬间 → 生成幽灵（上一帧活着、这一帧死了）
     const aliveNow = new Set(f.players.filter(p => p.alive).map(p => p.id));
@@ -71,6 +78,7 @@ function enterLocalGame(playerId = "me") {
 
 /** 在线对战 */
 export async function enterOnlineGame(room: Room<any>) {
+  (window as any).__room = room; // 调试句柄（大厅接管后移除）
   room.send("setName", localStorage.getItem("pt-name") || "无名氏");
   hub.setHandlers({
     onDir: d => room.send("dir", { dir: d }),
