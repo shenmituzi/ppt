@@ -93,12 +93,21 @@ async function enterOnlineGame(room: Room<any>) {
   runGameLoop((dt, now) => builder.frame(dt, now), room.sessionId);
 }
 
-// 启动：有未完成的对局先重连，否则进大厅
+// 启动：有未完成的对局先重连（已结束的旧对局直接放弃），否则进大厅
+function goLobby() {
+  document.getElementById("screen-lobby")!.classList.remove("hidden");
+  initLobby(enterOnlineGame, () => enterLocalGame());
+}
+
 tryReconnect().then(room => {
-  if (room) {
-    enterOnlineGame(room);
-  } else {
-    document.getElementById("screen-lobby")!.classList.remove("hidden");
-    initLobby(enterOnlineGame, () => enterLocalGame());
+  if (!room) {
+    goLobby();
+    return;
   }
+  if (room.state.phase === "ended") {
+    room.leave(); // 旧对局早已结束，别把用户关在结算画面里
+    goLobby();
+    return;
+  }
+  enterOnlineGame(room);
 });

@@ -26,8 +26,9 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
     check();
   }
 
-  /** 创建房间后的等待画面：玩家列表 + 房主"开始游戏"按钮 */
-  function showWaiting(room: GameRoom) {
+  /** 等待画面：玩家列表；withStart 时显示房主"开始游戏"按钮；
+   *  need 传入匹配目标人数，超过 10 秒未凑齐在状态栏给出指引 */
+  function showWaiting(room: GameRoom, withStart: boolean, need = 0) {
     lobby.querySelectorAll("button, input, p").forEach(el => {
       if (el.id !== "lobby-status") (el as HTMLElement).style.display = "none";
     });
@@ -35,40 +36,59 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
     const startBtn = document.createElement("button");
     startBtn.textContent = "开始游戏";
     startBtn.onclick = () => room.send("start");
+    if (withStart) lobby.appendChild(startBtn);
     lobby.appendChild(info);
-    lobby.appendChild(startBtn);
+    const startAt = Date.now();
+    let hinted = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
     const refresh = () => {
+      if (room.state.phase === "playing" && timer) clearInterval(timer); // 已开局，停止轮询
       const names: string[] = [];
       room.state.players.forEach(p => names.push(p.name));
-      info.textContent = `玩家：${names.join("、")}（${names.length}/4）—— 满员自动开局，房主可直接开始`;
+      info.textContent = withStart
+        ? `玩家：${names.join("、")}（${names.length}/4）—— 满员自动开局，房主可直接开始`
+        : `已进入匹配队列（当前 ${names.length} 人）—— 满员自动开局，请稍候`;
+      if (need > 0 && !hinted && names.length < need && Date.now() - startAt > 10_000) {
+        hinted = true;
+        say("还没凑齐人：再开一个窗口/标签页点同样的匹配，或先点【单机练习】");
+      }
     };
     room.onStateChange(refresh);
     refresh();
+    timer = setInterval(refresh, 1000); // 单人等待时状态不再变化，靠轮询驱动提示
   }
 
-  // 单机练习入口
+  // 单机练习入口（一个人也能立刻玩，放显眼位置）
   const localBtn = document.createElement("button");
-  localBtn.textContent = "单机练习";
+  localBtn.textContent = "单机练习（无需等待）";
   localBtn.onclick = onLocal;
   lobby.appendChild(localBtn);
 
-  document.getElementById("btn-quick2")!.onclick = () =>
-    guard(async () => {
-      say("匹配中…（30 秒没凑齐就创建房间喊朋友吧）");
-      watchAndEnter(await quickMatch(2));
-    });
-  document.getElementById("btn-quick4")!.onclick = () =>
+  // 匹配：进入队列后显示等待室；10 秒还没凑齐人给出明确指引
+  let waitHint: ReturnType<typeof setTimeout> | undefined;
+  const startQuick = (mode: 2 | 4) =>
     guard(async () => {
       say("匹配中…");
-      watchAndEnter(await quickMatch(4));
+      clearTimeout(waitHint);
+      waitHint = setTimeout(
+        () => say("还没凑齐人：再开一个窗口/标签页点同样的匹配，或先点【单机练习】"),
+        10_000,
+      );
+      const room = await quickMatch(mode);
+      clearTimeout(waitHint);
+      watchAndEnter(room);
+      showWaiting(room, false, mode);
     });
+
+  document.getElementById("btn-quick2")!.onclick = () => startQuick(2);
+  document.getElementById("btn-quick4")!.onclick = () => startQuick(4);
   document.getElementById("btn-create")!.onclick = () =>
     guard(async () => {
       say("创建中…");
       const { room, code } = await createRoom();
       say(code ? `房间号 ${code} —— 发给朋友，满员自动开局` : "已创建房间");
       watchAndEnter(room);
-      showWaiting(room);
+      showWaiting(room, true);
     });
   document.getElementById("btn-join")!.onclick = () =>
     guard(async () => {
