@@ -164,8 +164,16 @@ export class GameSim {
     return !this.bombAt(gx, gy);
   }
 
+  /** 拾取道具：到达目标格中心时触发 */
   protected tryPickup(p: SimPlayer): void {
-    void p;
+    const i = Math.round(p.y) * GRID_W + Math.round(p.x);
+    const item = this.items.get(i);
+    if (!item) return;
+    this.items.delete(i);
+    if (item.type === ItemType.Bomb) p.bombsMax = Math.min(MAX_BOMBS, p.bombsMax + 1);
+    else if (item.type === ItemType.Flame) p.flameLen = Math.min(MAX_FLAMES, p.flameLen + 1);
+    else p.speedLevel = Math.min(MAX_SPEED_LEVEL, p.speedLevel + 1);
+    this.events.push({ type: "itemPicked", playerId: p.id, itemType: item.type });
   }
   protected stepBombs(): void {
     const due = this.bombs.filter(b => b.explodeAt <= this.elapsedMs);
@@ -187,14 +195,21 @@ export class GameSim {
 
     for (const c of cells) {
       const i = c.gy * GRID_W + c.gx;
+      const existingItem = this.items.get(i); // 火焰烧毁的是爆炸前就存在的道具
       if (this.grid[i] === Tile.SoftWall) {
         this.grid[i] = Tile.Floor;
-        // 道具掉落逻辑 Task 8 填充，先发事件
-        this.events.push({ type: "wallBroken", gx: c.gx, gy: c.gy, item: null });
+        const dropped = this.rng() < ITEM_DROP_RATE;
+        const item = dropped
+          ? (this.rng() < 1 / 3 ? ItemType.Bomb : this.rng() < 1 / 2 ? ItemType.Flame : ItemType.Speed)
+          : null;
+        if (item !== null) {
+          this.items.set(i, { id: this.nextId++, gx: c.gx, gy: c.gy, type: item });
+        }
+        this.events.push({ type: "wallBroken", gx: c.gx, gy: c.gy, item });
       }
       const chain = this.bombAt(c.gx, c.gy);
       if (chain) this.explodeBomb(chain, exploded); // 连锁引爆
-      this.items.delete(i); // 火焰烧毁道具（Task 8 前恒为空）
+      if (existingItem) this.items.delete(i);
       for (const p of this.players.values()) {
         if (
           p.alive &&
@@ -209,13 +224,52 @@ export class GameSim {
     }
   }
 
+  /** 认输/断线超时判负：立即结算 */
+  forfeit(playerId: string): void {
+    const p = this.players.get(playerId);
+    if (!p || !p.alive || this.phase !== "playing") return;
+    p.alive = false;
+    this.events.push({ type: "died", playerId, gx: Math.round(p.x), gy: Math.round(p.y) });
+    this.checkEnd();
+  }
+
+  protected stepSuddenDeath(): void {
+    if (this.elapsedMs < SUDDEN_DEATH_AT_MS) return;
+    if (this.elapsedMs < this.nextSuddenDeathAt) return;
+    const k = this.suddenDeathRing;
+    if (k > Math.floor(Math.min(GRID_W, GRID_H) / 2)) return;
+    for (let gy = 0; gy < GRID_H; gy++) {
+      for (let gx = 0; gx < GRID_W; gx++) {
+        const onRing = gx === k || gx === GRID_W - 1 - k || gy === k || gy === GRID_H - 1 - k;
+        if (!onRing) continue;
+        const i = gy * GRID_W + gx;
+        if (this.grid[i] === Tile.HardWall) continue;
+        this.grid[i] = Tile.HardWall;
+        this.items.delete(i);
+        this.bombs = this.bombs.filter(b => !(b.gx === gx && b.gy === gy));
+        for (const p of this.players.values()) {
+          if (p.alive && Math.round(p.x) === gx && Math.round(p.y) === gy) {
+            p.alive = false;
+            this.events.push({ type: "died", playerId: p.id, gx, gy });
+          }
+        }
+      }
+    }
+    this.suddenDeathRing++;
+    this.nextSuddenDeathAt = this.elapsedMs + SUDDEN_DEATH_STEP_MS;
+  }
+
+  protected checkEnd(): void {
+    if (this.players.size < 2) return; // 单人练习模式不结算
+    const alive = [...this.players.values()].filter(p => p.alive);
+    if (alive.length <= 1) {
+      this.phase = "ended";
+      this.winnerIds = alive.map(p => p.id);
+      this.events.push({ type: "ended", winnerIds: this.winnerIds });
+    }
+  }
+
   protected stepExplosions(): void {
     this.explosions = this.explosions.filter(e => e.expireAt > this.elapsedMs);
   }
-  protected stepSuddenDeath(): void {}
-  protected checkEnd(): void {}
 }
-
-// 引用避免未使用告警（后续任务填充对应桩时移除）
-void ITEM_DROP_RATE; void SUDDEN_DEATH_STEP_MS;
-void MAX_BOMBS; void MAX_FLAMES; void MAX_SPEED_LEVEL; void ItemType;

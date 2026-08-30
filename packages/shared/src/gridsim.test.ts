@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { GRID_W, SPAWN_INVINCIBLE_MS, Tile } from "./constants";
+import {
+  GRID_W, SPAWN_INVINCIBLE_MS, SUDDEN_DEATH_AT_MS, SUDDEN_DEATH_STEP_MS,
+  ItemType, MAX_BOMBS, MAX_FLAMES, MAX_SPEED_LEVEL, Tile,
+} from "./constants";
 import { GameSim } from "./gridsim";
 
 const idx = (gx: number, gy: number) => gy * GRID_W + gx;
@@ -119,14 +122,135 @@ describe("GameSim 泡泡与爆炸", () => {
   });
 
   it("爆炸产生 died 事件，火焰持续 500ms 后消失", () => {
-    const sim = makeSim();
-    sim.placeBomb("a"); // a 站在泡泡上
+    // 单人练习模式：死亡不触发结算，step 持续运行
+    const sim = makeSim(["solo"]);
+    sim.placeBomb("solo"); // 站在泡泡上
     for (let i = 0; i < 26; i++) sim.step(100);
     const events = sim.drainEvents();
-    expect(events.some(e => e.type === "died" && e.playerId === "a")).toBe(true);
-    expect(sim.players.get("a")!.alive).toBe(false);
+    expect(events.some(e => e.type === "died" && e.playerId === "solo")).toBe(true);
+    expect(sim.players.get("solo")!.alive).toBe(false);
+    expect(sim.phase).toBe("playing");
     expect(sim.explosions).toHaveLength(1);
     for (let i = 0; i < 5; i++) sim.step(100); // 又过 500ms
     expect(sim.explosions).toHaveLength(0);
+  });
+});
+
+describe("GameSim 道具", () => {
+  it("火焰烧毁道具", () => {
+    const sim = makeSim();
+    sim.items.set(idx(2, 1), { id: 1, gx: 2, gy: 1, type: ItemType.Flame });
+    sim.placeBomb("a"); // (1,1) 先放泡
+    const a = sim.players.get("a")!;
+    a.x = 5; a.y = 5; a.fromX = 5; a.fromY = 5; a.dir = null; // 再挪开人
+    for (let i = 0; i < 26; i++) sim.step(100);
+    expect(sim.items.has(idx(2, 1))).toBe(false);
+  });
+
+  it("走到道具格拾取并生效", () => {
+    const sim = makeSim();
+    sim.items.set(idx(2, 1), { id: 1, gx: 2, gy: 1, type: ItemType.Flame });
+    sim.setInput("a", "right");
+    for (let i = 0; i < 4; i++) sim.step(250);
+    const a = sim.players.get("a")!;
+    expect(a.flameLen).toBe(2);
+    expect(sim.items.has(idx(2, 1))).toBe(false);
+    expect(sim.drainEvents().some(e => e.type === "itemPicked")).toBe(true);
+  });
+
+  it("道具效果受上限约束", () => {
+    const sim = makeSim();
+    const a = sim.players.get("a")!;
+    a.bombsMax = MAX_BOMBS;
+    a.flameLen = MAX_FLAMES;
+    a.speedLevel = MAX_SPEED_LEVEL;
+    sim.items.set(idx(2, 1), { id: 1, gx: 2, gy: 1, type: ItemType.Bomb });
+    sim.setInput("a", "right");
+    for (let i = 0; i < 4; i++) sim.step(250);
+    expect(a.bombsMax).toBe(MAX_BOMBS);
+    expect(a.flameLen).toBe(MAX_FLAMES);
+    expect(a.speedLevel).toBe(MAX_SPEED_LEVEL);
+  });
+
+  it("烧墙按注入的 rng 掉道具（三种均分）", () => {
+    // rng 序列：第 1 次 0.1（<0.3 → 掉落），第 2 次 0.2（<1/3 → Bomb）
+    const seq = [0.1, 0.2];
+    let i = 0;
+    const fixed = () => (i < seq.length ? seq[i++] : 0.999);
+    const sim = new GameSim(42, ["a", "b"], fixed);
+    sim.grid[idx(2, 1)] = Tile.SoftWall;
+    sim.grid[idx(1, 2)] = Tile.Floor; // 下方清成地板，保证火焰只烧 (2,1) 消耗 rng
+    sim.placeBomb("a"); // (1,1) 先放泡
+    const a = sim.players.get("a")!;
+    a.x = 5; a.y = 5; a.fromX = 5; a.fromY = 5; a.dir = null;
+    for (let i = 0; i < 26; i++) sim.step(100);
+    expect(sim.items.get(idx(2, 1))?.type).toBe(ItemType.Bomb);
+    const broken = sim.drainEvents().filter(e => e.type === "wallBroken");
+    expect(broken.some(e => e.gx === 2 && e.gy === 1 && e.item === ItemType.Bomb)).toBe(true);
+  });
+});
+
+describe("GameSim 胜负与突然死亡", () => {
+  it("出生无敌：2 秒内站在火焰上不死", () => {
+    const sim = makeSim();
+    sim.bombs.push({ id: 1, gx: 1, gy: 1, ownerId: "b", power: 1, explodeAt: 0 });
+    sim.step(16); // elapsed=16ms < 2000ms
+    expect(sim.players.get("a")!.alive).toBe(true);
+  });
+
+  it("无敌过期后被火焰炸死", () => {
+    const sim = makeSim();
+    const a = sim.players.get("a")!;
+    a.invincibleUntil = 0;
+    sim.bombs.push({ id: 1, gx: 1, gy: 1, ownerId: "b", power: 1, explodeAt: 0 });
+    sim.step(16);
+    expect(a.alive).toBe(false);
+  });
+
+  it("两人局死一人即结束，胜者是存活者", () => {
+    const sim = makeSim(["a", "b"]);
+    sim.players.get("b")!.alive = false;
+    sim.step(16);
+    expect(sim.phase).toBe("ended");
+    expect(sim.winnerIds).toEqual(["a"]);
+  });
+
+  it("同时死亡为平局", () => {
+    const sim = makeSim(["a", "b"]);
+    sim.players.get("a")!.alive = false;
+    sim.players.get("b")!.alive = false;
+    sim.step(16);
+    expect(sim.phase).toBe("ended");
+    expect(sim.winnerIds).toEqual([]);
+  });
+
+  it("单人练习模式永不自动结算", () => {
+    const sim = makeSim(["solo"]);
+    sim.players.get("solo")!.alive = false;
+    sim.step(16);
+    expect(sim.phase).toBe("playing");
+  });
+
+  it("forfeit 直接判负并触发结算", () => {
+    const sim = makeSim(["a", "b"]);
+    sim.forfeit("a");
+    expect(sim.phase).toBe("ended");
+    expect(sim.winnerIds).toEqual(["b"]);
+  });
+
+  it("3 分钟后突然死亡：外圈逐层合拢，圈内玩家被压死", () => {
+    const sim = makeSim(["a", "b", "c", "d"]);
+    // 四人全部挪到地图中央安全位，保证突然死亡展开期间 phase 仍是 playing
+    const spots = [[5, 5], [7, 5], [5, 7], [7, 7]];
+    [...sim.players.values()].forEach((p, i) => {
+      sim.grid[idx(spots[i][0], spots[i][1])] = Tile.Floor;
+      p.x = spots[i][0]; p.y = spots[i][1]; p.fromX = spots[i][0]; p.fromY = spots[i][1]; p.dir = null;
+    });
+    for (let i = 0; i < SUDDEN_DEATH_AT_MS / 1000; i++) sim.step(1000);
+    expect(sim.grid[idx(1, 1)]).toBe(Tile.HardWall); // 第一圈含出生点
+    expect(sim.grid[idx(2, 1)]).toBe(Tile.HardWall);
+    expect(sim.players.get("a")!.alive).toBe(true); // 人已挪走
+    for (let i = 0; i < SUDDEN_DEATH_STEP_MS / 1000; i++) sim.step(1000);
+    expect(sim.grid[idx(3, 2)]).toBe(Tile.HardWall); // 第二圈（gy==2）
   });
 });
