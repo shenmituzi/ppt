@@ -1,6 +1,13 @@
 import { Client, type Room } from "colyseus.js";
 
-export const colyseus = new Client("ws://localhost:2567");
+/** 开发连本机；生产走同域反向代理（nginx /ws → 127.0.0.1:2567） */
+function serverUrl(): string {
+  if (import.meta.env.DEV) return "ws://localhost:2567";
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}/ws`;
+}
+
+export const colyseus = new Client(serverUrl());
 
 export interface RoomMeta { code?: string; mode?: number }
 

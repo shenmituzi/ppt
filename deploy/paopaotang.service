@@ -1,0 +1,17 @@
+[Unit]
+Description=泡泡堂 Colyseus 游戏服务器
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/paopaotang/packages/server
+ExecStart=/opt/paopaotang/node_modules/.bin/tsx src/index.ts
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+
+# 资源限制（这台机器上游戏很轻量，够用）
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
