@@ -10,11 +10,17 @@ export interface PlayerView {
   moving: boolean;
   /** 昵称（联网模式提供，渲染在头顶） */
   name?: string;
+  /** 天气专属道具状态 */
+  bootsOn?: boolean;
+  rodOn?: boolean;
+  lanternOn?: boolean;
 }
 
 export interface BombView { id: string; gx: number; gy: number; fuse: number }
 export interface FlameView { id: string; cells: Vec[]; life: number }
 export interface ItemView { id: string; gx: number; gy: number; type: ItemType }
+export interface WarnView { gx: number; gy: number; strikeAt: number }
+export interface StrikeView { gx: number; gy: number; at: number }
 
 export interface FrameData {
   grid: Uint8Array;
@@ -22,11 +28,17 @@ export interface FrameData {
   bombs: BombView[];
   flames: FlameView[];
   items: ItemView[];
-  phase: "waiting" | "playing" | "ended";
+  warnings: WarnView[];
+  strikes: StrikeView[];
+  /** 全屏闪电白闪强度 0~1 */
+  flash: number;
+  weather: string;
+  phase: Phase;
   elapsedMs: number;
   suddenDeathAt: number;
   winnerIds: string[];
 }
+type Phase = "waiting" | "playing" | "ended";
 
 /** 单机模式：直接从 GameSim 构造渲染帧 */
 export function simToFrame(sim: GameSim): FrameData {
@@ -40,6 +52,9 @@ export function simToFrame(sim: GameSim): FrameData {
       alive: p.alive,
       invincible: sim.elapsedMs < p.invincibleUntil,
       moving: p.dir !== null,
+      bootsOn: p.bootsOn,
+      rodOn: p.rodOn,
+      lanternOn: p.lanternOn,
     })),
     bombs: sim.bombs.map(b => ({
       id: String(b.id), gx: b.gx, gy: b.gy, fuse: Math.max(0, b.explodeAt - sim.elapsedMs),
@@ -48,6 +63,10 @@ export function simToFrame(sim: GameSim): FrameData {
       id: String(e.id), cells: e.cells, life: Math.max(0, e.expireAt - sim.elapsedMs),
     })),
     items: [...sim.items.values()].map(it => ({ id: String(it.id), gx: it.gx, gy: it.gy, type: it.type })),
+    warnings: [],
+    strikes: [],
+    flash: 0,
+    weather: sim.weather,
     phase: sim.phase,
     elapsedMs: sim.elapsedMs,
     suddenDeathAt: SUDDEN_DEATH_AT_MS,
@@ -62,8 +81,6 @@ export function parseGrid(s: string): Uint8Array {
   return g;
 }
 
-void FLAME_MS;
-
 // ---------- 联网模式 ----------
 
 import type { Room } from "colyseus.js";
@@ -74,8 +91,21 @@ export class OnlineFrameBuilder {
   private disp = new Map<string, { x: number; y: number }>();
   private cachedGrid = "";
   private gridData: Uint8Array = new Uint8Array(0);
+  private warns: (WarnView & { receivedAt: number })[] = [];
+  private strikes: StrikeView[] = [];
+  private flashUntil = 0;
 
   constructor(private room: Room<GameRoomStateView>) {}
+
+  /** 雷电警示（服务器消息） */
+  addWarn(w: WarnView) {
+    this.warns.push({ ...w, receivedAt: performance.now() });
+  }
+  /** 落雷（服务器消息）：记录 300ms 特效窗口并触发全屏白闪 */
+  addStrike(s: { gx: number; gy: number }) {
+    this.strikes.push({ gx: s.gx, gy: s.gy, at: performance.now() });
+    this.flashUntil = performance.now() + 220;
+  }
 
   frame(dtMs: number, nowMs: number): FrameData {
     void nowMs;
@@ -103,6 +133,9 @@ export class OnlineFrameBuilder {
         invincible: p.invincible,
         moving: p.moving,
         name: p.name,
+        bootsOn: p.bootsOn,
+        rodOn: p.rodOn,
+        lanternOn: p.lanternOn,
       });
     });
     for (const id of [...this.disp.keys()]) {
@@ -124,6 +157,10 @@ export class OnlineFrameBuilder {
       bombs,
       flames,
       items,
+      warnings: this.warns.filter(w => s.serverElapsedMs < w.strikeAt + 500),
+      strikes: this.strikes.filter(st => nowMs - st.at < 300),
+      flash: nowMs < this.flashUntil ? (this.flashUntil - nowMs) / 220 : 0,
+      weather: s.weather,
       phase: s.phase,
       elapsedMs: s.serverElapsedMs,
       suddenDeathAt: s.suddenDeathAt,
@@ -131,3 +168,5 @@ export class OnlineFrameBuilder {
     };
   }
 }
+
+void FLAME_MS;

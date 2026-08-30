@@ -1,5 +1,5 @@
 import "../style.css";
-import { GameSim } from "@pt/shared";
+import { GameSim, WEATHERS, WEATHER_LABEL, type WeatherType } from "@pt/shared";
 
 // 开发期注册 SW 绕过顽固缓存；生产构建不注册（并清理旧的）
 if (import.meta.env.DEV && "serviceWorker" in navigator) {
@@ -37,7 +37,9 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   hudAlive.className = "pill";
   const hudTime = document.createElement("span");
   hudTime.className = "pill warn";
-  hud.replaceChildren(hudAlive, hudTime);
+  const hudWx = document.createElement("span");
+  hudWx.className = "pill";
+  hud.replaceChildren(hudWx, hudAlive, hudTime);
   const ghosts = new Map<string, GhostView>();
   let last = performance.now();
   let prevAlive = new Set<string>(); // 上一帧仍存活的角色
@@ -66,9 +68,13 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     prevFlames = f.flames.length;
     prevItems = f.items.length;
 
-    renderer.draw(f, now, [...ghosts.values()]);
+    // 雾天视野：以自己为中心的光圈参数
+    const me = f.players.find(p => p.id === myId);
+    const viewer = me && me.alive ? { x: me.x, y: me.y, lantern: !!me.lanternOn } : null;
+    renderer.draw(f, now, [...ghosts.values()], viewer);
 
-    // HUD（两枚信息胶囊）
+    // HUD（三枚信息胶囊：天气 / 存活 / 倒计时）
+    hudWx.textContent = WEATHER_LABEL[f.weather as WeatherType] ?? "☀️ 晴朗";
     if (f.elapsedMs >= f.suddenDeathAt) {
       hudAlive.textContent = `存活 ${f.players.filter(p => p.alive).length}`;
       hudTime.textContent = "⚠ 突然死亡！";
@@ -95,12 +101,35 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
 
 /** 单机练习：规则引擎跑在浏览器本地 */
 function enterLocalGame(playerId = "me") {
-  const sim = new GameSim((Math.random() * 2 ** 31) | 0, [playerId]);
+  // ?weather=rain|snow|fog 可指定天气（调试/演示用），否则随机
+  const param = new URLSearchParams(location.search).get("weather") as WeatherType | null;
+  const weather: WeatherType =
+    param && WEATHERS.includes(param) ? param : WEATHERS[(Math.random() * WEATHERS.length) | 0];
+  const sim = new GameSim((Math.random() * 2 ** 31) | 0, [playerId], undefined, weather);
   hub.setHandlers({
     onDir: d => sim.setInput(playerId, d),
     onBomb: () => sim.placeBomb(playerId),
   });
-  runGameLoop(() => simToFrame(sim), playerId);
+  // 闪电事件 → 客户端特效
+  const warns: { gx: number; gy: number; strikeAt: number }[] = [];
+  const strikes: { gx: number; gy: number; at: number }[] = [];
+  runGameLoop((dt, now) => {
+    sim.step(dt);
+    for (const ev of sim.drainEvents()) {
+      if (ev.type === "lightningWarn") warns.push({ gx: ev.gx, gy: ev.gy, strikeAt: ev.strikeAt });
+      else if (ev.type === "lightningStrike") {
+        strikes.push({ gx: ev.gx, gy: ev.gy, at: now });
+        sfx.play("thunder");
+      }
+    }
+    // 清理过期特效
+    for (let i = warns.length - 1; i >= 0; i--) if (sim.elapsedMs > warns[i].strikeAt + 500) warns.splice(i, 1);
+    for (let i = strikes.length - 1; i >= 0; i--) if (now - strikes[i].at > 300) strikes.splice(i, 1);
+    const f = simToFrame(sim);
+    f.warnings = warns;
+    f.strikes = strikes;
+    return f;
+  }, playerId);
 }
 
 /** 在线对战：规则引擎跑在服务器，客户端收发输入与状态 */
@@ -115,6 +144,11 @@ async function enterOnlineGame(room: Room<any>) {
     onBomb: () => room.send("bomb"),
   });
   const builder = new OnlineFrameBuilder(room);
+  room.onMessage("wx-warn", w => builder.addWarn(w));
+  room.onMessage("wx-strike", s => {
+    builder.addStrike(s);
+    sfx.play("thunder");
+  });
   runGameLoop((dt, now) => builder.frame(dt, now), room.sessionId);
 }
 

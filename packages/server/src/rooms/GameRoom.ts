@@ -1,5 +1,5 @@
 import type { Client } from "colyseus";
-import { GameSim, SUDDEN_DEATH_AT_MS, type DirInput } from "@pt/shared";
+import { GameSim, SUDDEN_DEATH_AT_MS, WEATHERS, type DirInput, type WeatherType } from "@pt/shared";
 import { Room } from "../interop";
 import { GameRoomState, PlayerState } from "../state/GameRoomState";
 import { syncState, gridToString } from "../state/sync";
@@ -97,8 +97,10 @@ export class GameRoom extends Room<GameRoomState> {
 
   startGame() {
     if (this.state.phase !== "waiting" || this.clients.length < 2) return;
-    this.sim = new GameSim(generateSeed(), this.joinOrder);
+    const weather: WeatherType = WEATHERS[(Math.random() * WEATHERS.length) | 0];
+    this.sim = new GameSim(generateSeed(), this.joinOrder, undefined, weather);
     this.state.grid = gridToString(this.sim.grid);
+    this.state.weather = weather;
     this.state.suddenDeathAt = SUDDEN_DEATH_AT_MS;
     this.state.phase = "playing";
     this.state.serverElapsedMs = 0;
@@ -109,8 +111,13 @@ export class GameRoom extends Room<GameRoomState> {
     if (!this.sim || this.state.phase !== "playing") return;
     this.sim.step(Math.min(dtMs, 100));
     syncState(this.state, this.sim);
-    // 一次性事件目前仅驱动结算（syncState 已兜底写 phase/winnerIds）；
-    // 其余事件（音效广播等）留待后续扩展
-    this.sim.drainEvents();
+    for (const ev of this.sim.drainEvents()) {
+      // 闪电事件广播给客户端做警示圈与落雷特效
+      if (ev.type === "lightningWarn") {
+        this.broadcast("wx-warn", { gx: ev.gx, gy: ev.gy, strikeAt: ev.strikeAt });
+      } else if (ev.type === "lightningStrike") {
+        this.broadcast("wx-strike", { gx: ev.gx, gy: ev.gy });
+      }
+    }
   }
 }

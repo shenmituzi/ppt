@@ -1,15 +1,23 @@
-import { BOMB_FUSE_MS, FLAME_MS, GRID_H, GRID_W, ItemType, SPAWNS, TILE, Tile } from "@pt/shared";
+import {
+  BOMB_FUSE_MS, FLAME_MS, FOG_LANTERN_FACTOR, FOG_VISION_CELLS, GRID_H, GRID_W,
+  ItemType, LIGHTNING_WARN_MS, SPAWNS, TILE, Tile,
+} from "@pt/shared";
 import type { FrameData } from "./frame";
 
 export const PLAYER_COLORS = ["#ff5a5f", "#3fa7ff", "#ffcb2e", "#3fdc7f"];
 const PLAYER_COLORS_DARK = ["#d64549", "#2f8fe0", "#e0ab22", "#2fb869"];
 
 export interface GhostView { x: number; y: number; colorIndex: number; diedAtMs: number }
+/** 雾天视野参数（自己角色的位置与是否持有提灯） */
+export interface ViewerView { x: number; y: number; lantern: boolean }
 
 const ITEM_COLOR: Record<ItemType, string> = {
   [ItemType.Bomb]: "#16a085",
   [ItemType.Flame]: "#e67e22",
   [ItemType.Speed]: "#9b59b6",
+  [ItemType.Boots]: "#5fa8ff",
+  [ItemType.Rod]: "#ffd23f",
+  [ItemType.Lantern]: "#ff9f5a",
 };
 
 const center = (v: number) => (v + 0.5) * TILE;
@@ -42,17 +50,19 @@ export class Renderer {
     this.ctx = canvas.getContext("2d")!;
   }
 
-  draw(f: FrameData, nowMs: number, ghosts: GhostView[] = []) {
+  draw(f: FrameData, nowMs: number, ghosts: GhostView[] = [], viewer: ViewerView | null = null) {
     const { ctx } = this;
     ctx.clearRect(0, 0, GRID_W * TILE, GRID_H * TILE);
     this.drawTiles(f.grid, nowMs);
     // 出生点标记（帮助辨认自己的方位）
     for (const [i, s] of SPAWNS.entries()) this.drawSpawnPad(s.gx, s.gy, i);
+    this.drawGroundWeather(f, nowMs); // 暴雪积雪覆盖在地面之上、物件之下
     for (const it of f.items) this.drawItem(it.gx, it.gy, it.type, nowMs);
     for (const b of f.bombs) this.drawBomb(b.gx, b.gy, b.fuse, nowMs);
     for (const fl of f.flames) this.drawFlame(fl.cells, fl.life, nowMs);
     for (const g of ghosts) this.drawGhost(g, nowMs);
     for (const p of f.players) this.drawPlayer(p, nowMs);
+    this.drawSkyWeather(f, nowMs, viewer); // 雨/雪/雾/闪电覆盖在最上层
     this.drawVignette();
   }
 
@@ -204,16 +214,49 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(0, 4, 2.2, 0, Math.PI * 2);
       ctx.fill();
-    } else {
-      // 速度：闪电
+    } else if (type === ItemType.Boots) {
+      // 钉鞋：六角雪花
+      ctx.strokeStyle = "#5fa8ff";
+      ctx.lineWidth = 2;
+      for (let a = 0; a < 6; a++) {
+        const ang = (a * Math.PI) / 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(ang) * 7, Math.sin(ang) * 7);
+        ctx.stroke();
+      }
+    } else if (type === ItemType.Rod) {
+      // 避雷针：竖杆 + 顶部小球 + 侧边闪电
+      ctx.strokeStyle = ITEM_COLOR[type];
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(2, -8);
-      ctx.lineTo(-5, 1);
-      ctx.lineTo(-1, 1);
-      ctx.lineTo(-3, 8);
-      ctx.lineTo(5, -1);
-      ctx.lineTo(1, -1);
+      ctx.moveTo(-3, 8);
+      ctx.lineTo(-3, -5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-3, -6.5, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(4, -8);
+      ctx.lineTo(0, -1);
+      ctx.lineTo(3, -1);
+      ctx.lineTo(-1, 8);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(2, 0);
       ctx.closePath();
+      ctx.fill();
+    } else {
+      // 提灯：灯体 + 暖光
+      rr(ctx, -4.5, -6, 9, 12, 3);
+      ctx.fillStyle = "#ffb84d";
+      ctx.fill();
+      ctx.strokeStyle = "#b25b1e";
+      ctx.lineWidth = 1.6;
+      rr(ctx, -4.5, -6, 9, 12, 3);
+      ctx.stroke();
+      ctx.fillStyle = "#fff3b0";
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -343,6 +386,17 @@ export class Renderer {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    // 天气道具徽章（头顶一排小图标）
+    let bx = cx - 8;
+    const badge = (t: string) => {
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(t, bx, cy - r - 16);
+      bx += 12;
+    };
+    if (p.bootsOn) badge("❄");
+    if (p.rodOn) badge("⚡");
+    if (p.lanternOn) badge("🏮");
     // 昵称（联网模式提供）
     if (p.name) {
       ctx.font = 'bold 10px "Microsoft YaHei", sans-serif';
@@ -376,6 +430,129 @@ export class Renderer {
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.lineWidth = 1;
+  }
+
+  /** 暴雪积雪：随时间在地面铺白霜（画在地面之上、物件之下） */
+  private drawGroundWeather(f: FrameData, nowMs: number) {
+    void nowMs;
+    if (f.weather !== "snow") return;
+    const { ctx } = this;
+    const alpha = Math.min(0.5, (f.elapsedMs / 90_000) * 0.5); // 90 秒逐渐积雪
+    if (alpha <= 0.01) return;
+    ctx.fillStyle = `rgba(238,246,255,${alpha})`;
+    for (let gy = 0; gy < GRID_H; gy++) {
+      for (let gx = 0; gx < GRID_W; gx++) {
+        if (f.grid[gy * GRID_W + gx] !== Tile.Floor) continue;
+        ctx.fillRect(gx * TILE, gy * TILE, TILE, TILE);
+      }
+    }
+  }
+
+  /** 雨/雪粒子、迷雾、闪电警示与落雷（覆盖在最上层） */
+  private drawSkyWeather(f: FrameData, nowMs: number, viewer: ViewerView | null) {
+    const { ctx } = this;
+    const W = GRID_W * TILE;
+    const H = GRID_H * TILE;
+    if (f.weather === "rain") {
+      // 雨幕
+      ctx.strokeStyle = "rgba(178,204,255,.4)";
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 70; i++) {
+        const s = cellHash(i, 7);
+        const speed = 0.9 + (s % 5) * 0.12;
+        const x = ((s % W) + nowMs * 0.18 * speed) % W;
+        const y = (((s * 13) % H) + nowMs * 0.9 * speed) % H;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 2, y + 13);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(20,32,60,.16)";
+      ctx.fillRect(0, 0, W, H);
+    } else if (f.weather === "snow") {
+      // 两层雪花（近大远小）
+      const layers: [number, number, number, number][] = [
+        [46, 0.05, 2.2, 0.85],
+        [34, 0.09, 1.4, 0.6],
+      ];
+      for (const [count, speed, size, alpha] of layers) {
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        for (let i = 0; i < count; i++) {
+          const s = cellHash(i, count);
+          const x = (((s % W) + Math.sin(nowMs / 900 + i) * 22) % W + W) % W;
+          const y = (((s * 17) % H) + nowMs * speed) % H;
+          ctx.beginPath();
+          ctx.arc(x, y, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.fillStyle = "rgba(190,215,255,.08)";
+      ctx.fillRect(0, 0, W, H);
+    } else if (f.weather === "fog") {
+      // 飘动的雾团
+      ctx.fillStyle = "rgba(214,224,238,.15)";
+      for (let i = 0; i < 6; i++) {
+        const s = cellHash(i, 42);
+        const x = (((s % (W + 300)) + nowMs * (0.014 + (i % 3) * 0.006)) % (W + 300)) - 150;
+        const y = (s * 11) % H;
+        ctx.beginPath();
+        ctx.ellipse(x, y, 130 + (s % 60), 46 + (i % 3) * 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 视野限制：以自己为中心的光圈，提灯可扩大
+      if (viewer) {
+        const cells = FOG_VISION_CELLS * (viewer.lantern ? FOG_LANTERN_FACTOR : 1);
+        const r = cells * TILE;
+        const g = ctx.createRadialGradient(
+          center(viewer.x), center(viewer.y), r * 0.45,
+          center(viewer.x), center(viewer.y), r,
+        );
+        g.addColorStop(0, "rgba(208,219,234,0)");
+        g.addColorStop(1, "rgba(205,216,232,.88)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+    // 闪电警示圈（黄色闪烁）
+    for (const w of f.warnings) {
+      const remain = w.strikeAt - f.elapsedMs;
+      if (remain <= 0 || remain > LIGHTNING_WARN_MS + 500) continue;
+      if (Math.floor(nowMs / 120) % 2 !== 0) continue;
+      ctx.strokeStyle = "rgba(255,225,90,.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(center(w.gx), center(w.gy), TILE * 0.42, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // 落雷：闪电折线 + 落点光斑
+    for (const st of f.strikes) {
+      const age = (nowMs - st.at) / 300;
+      if (age < 0 || age > 1) continue;
+      const cx = center(st.gx);
+      const cy = center(st.gy);
+      ctx.strokeStyle = `rgba(255,255,180,${1 - age})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      let bx = cx + 18;
+      let by = 0;
+      ctx.moveTo(bx, by);
+      while (by < cy - 12) {
+        by += 26;
+        bx += (cellHash(bx | 0, by | 0) % 18) - 9;
+        ctx.lineTo(bx, by);
+      }
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255,240,150,${(1 - age) * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, TILE * 0.5 * (1 + age), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 落雷白闪
+    if (f.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${f.flash * 0.5})`;
+      ctx.fillRect(0, 0, W, H);
+    }
   }
 
   /** 四周轻微压暗，把视线聚拢到地图中央 */

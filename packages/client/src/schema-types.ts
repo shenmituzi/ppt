@@ -4,9 +4,11 @@ export interface PlayerStateView {
   x: number; y: number; moving: boolean;
   bombsMax: number; flameLen: number; speedLevel: number;
   alive: boolean; invincible: boolean; connected: boolean;
+  bootsOn: boolean; rodOn: boolean; lanternOn: boolean;
 }
 export interface GameRoomStateView {
   phase: "waiting" | "playing" | "ended";
+  weather: string;
   grid: string;
   serverElapsedMs: number;
   suddenDeathAt: number;

@@ -28,6 +28,9 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
     ps.speedLevel = p.speedLevel;
     ps.alive = p.alive;
     ps.invincible = sim.elapsedMs < p.invincibleUntil;
+    ps.bootsOn = p.bootsOn;
+    ps.rodOn = p.rodOn;
+    ps.lanternOn = p.lanternOn;
   }
 
   const bombIds = new Set<string>();

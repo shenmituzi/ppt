@@ -1,4 +1,4 @@
-import type { ItemType } from "./constants";
+import type { ItemType, WeatherType } from "./constants";
 
 export type Dir = "up" | "down" | "left" | "right";
 /** 玩家当前按住的方向；none = 全部松开 */
@@ -17,7 +17,11 @@ export type GameEvent =
   | { type: "wallBroken"; gx: number; gy: number; item: ItemType | null }
   | { type: "itemPicked"; playerId: string; itemType: ItemType }
   | { type: "died"; playerId: string; gx: number; gy: number }
-  | { type: "ended"; winnerIds: string[] };
+  | { type: "ended"; winnerIds: string[] }
+  /** 雷雨：闪电即将劈中某格（客户端显示警示圈） */
+  | { type: "lightningWarn"; gx: number; gy: number; strikeAt: number }
+  /** 雷雨：闪电落下（劈中软墙会烧毁并可能掉道具，劈中人即死，避雷针可免疫） */
+  | { type: "lightningStrike"; gx: number; gy: number; item: ItemType | null };
 
 export function dirDx(d: Dir | null): number {
   return d === "left" ? -1 : d === "right" ? 1 : 0;

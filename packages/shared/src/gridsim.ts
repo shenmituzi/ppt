@@ -1,7 +1,9 @@
 import {
   GRID_W, GRID_H, BOMB_FUSE_MS, FLAME_MS, SPAWN_INVINCIBLE_MS, ITEM_DROP_RATE,
   SUDDEN_DEATH_AT_MS, SUDDEN_DEATH_STEP_MS, SPEED_LEVELS, MAX_BOMBS, MAX_FLAMES, MAX_SPEED_LEVEL,
-  Tile, ItemType,
+  WEATHER_ITEM_RATE, SNOW_SLOW_FACTOR, RAIN_FUSE_FACTOR,
+  LIGHTNING_WARN_MS, LIGHTNING_INTERVAL_MIN, LIGHTNING_INTERVAL_MAX,
+  Tile, ItemType, type WeatherType,
 } from "./constants";
 import { Dir, DirInput, GameEvent, Vec, dirDx, dirDy } from "./types";
 import { generateMap, mulberry32 } from "./mapgen";
@@ -25,6 +27,12 @@ export interface SimPlayer {
   speedLevel: number;
   alive: boolean;
   invincibleUntil: number;
+  /** 暴雪天气：钉鞋（免疫减速） */
+  bootsOn: boolean;
+  /** 雷雨天气：避雷针（免疫闪电） */
+  rodOn: boolean;
+  /** 迷雾天气：提灯（视野更大） */
+  lanternOn: boolean;
 }
 
 export interface SimBomb {
@@ -49,6 +57,12 @@ export interface SimItem {
   type: ItemType;
 }
 
+interface PendingStrike {
+  gx: number;
+  gy: number;
+  strikeAt: number;
+}
+
 export class GameSim {
   grid: Uint8Array;
   players = new Map<string, SimPlayer>();
@@ -56,6 +70,7 @@ export class GameSim {
   explosions: SimExplosion[] = [];
   /** key = 格索引 */
   items = new Map<number, SimItem>();
+  weather: WeatherType;
   phase: "playing" | "ended" = "playing";
   winnerIds: string[] = [];
   elapsedMs = 0;
@@ -65,10 +80,19 @@ export class GameSim {
   protected nextId = 1;
   protected suddenDeathRing = 1;
   protected nextSuddenDeathAt = SUDDEN_DEATH_AT_MS;
+  /** 雷雨：下一次闪电时间（-1 = 尚未安排） */
+  protected nextLightningAt = -1;
+  private pendingStrikes: PendingStrike[] = [];
 
-  constructor(seed: number, playerIds: string[], rngOverride?: () => number) {
+  constructor(
+    seed: number,
+    playerIds: string[],
+    rngOverride?: () => number,
+    weather: WeatherType = "sunny",
+  ) {
     const map = generateMap(seed);
     this.grid = map.grid;
+    this.weather = weather;
     this.rng = rngOverride ?? mulberry32((seed ^ 0x9e3779b9) >>> 0);
     playerIds.forEach((id, i) => {
       const s = map.spawns[i % 4];
@@ -77,6 +101,7 @@ export class GameSim {
         fromX: s.gx, fromY: s.gy, progress: 0, dir: null, input: "none",
         bombsMax: 1, bombsActive: 0, flameLen: 1, speedLevel: 1,
         alive: true, invincibleUntil: SPAWN_INVINCIBLE_MS,
+        bootsOn: false, rodOn: false, lanternOn: false,
       });
     });
   }
@@ -94,9 +119,10 @@ export class GameSim {
     const gx = Math.round(p.x);
     const gy = Math.round(p.y);
     if (this.bombAt(gx, gy)) return;
+    const fuseFactor = this.weather === "rain" ? RAIN_FUSE_FACTOR : 1; // 雨天泡泡受潮提前炸
     this.bombs.push({
       id: this.nextId++, gx, gy, ownerId: p.id,
-      power: p.flameLen, explodeAt: this.elapsedMs + BOMB_FUSE_MS,
+      power: p.flameLen, explodeAt: this.elapsedMs + BOMB_FUSE_MS * fuseFactor,
     });
     p.bombsActive++;
     this.events.push({ type: "bombPlaced", gx, gy, ownerId: p.id });
@@ -108,6 +134,8 @@ export class GameSim {
     for (const p of this.players.values()) this.stepPlayer(p, dtMs);
     this.stepBombs();
     this.stepExplosions();
+    this.stepLightning();
+    this.stepPendingStrikes();
     this.stepSuddenDeath();
     this.checkEnd();
   }
@@ -128,7 +156,8 @@ export class GameSim {
     // 静止时先尝试起步；起步后同一帧即推进（起步帧不浪费）
     if (p.dir === null) this.tryContinue(p);
     if (p.dir !== null) {
-      const speed = SPEED_LEVELS[p.speedLevel - 1];
+      const snowFactor = this.weather === "snow" && !p.bootsOn ? SNOW_SLOW_FACTOR : 1;
+      const speed = SPEED_LEVELS[p.speedLevel - 1] * snowFactor;
       p.progress += (speed * dtMs) / 1000;
       if (p.progress >= 1) {
         p.x = p.fromX + dirDx(p.dir);
@@ -170,11 +199,20 @@ export class GameSim {
     const item = this.items.get(i);
     if (!item) return;
     this.items.delete(i);
-    if (item.type === ItemType.Bomb) p.bombsMax = Math.min(MAX_BOMBS, p.bombsMax + 1);
-    else if (item.type === ItemType.Flame) p.flameLen = Math.min(MAX_FLAMES, p.flameLen + 1);
-    else p.speedLevel = Math.min(MAX_SPEED_LEVEL, p.speedLevel + 1);
+    switch (item.type) {
+      case ItemType.Bomb: p.bombsMax = Math.min(MAX_BOMBS, p.bombsMax + 1); break;
+      case ItemType.Flame: p.flameLen = Math.min(MAX_FLAMES, p.flameLen + 1); break;
+      case ItemType.Speed: p.speedLevel = Math.min(MAX_SPEED_LEVEL, p.speedLevel + 1); break;
+      case ItemType.Boots:
+        p.bootsOn = true; // 免疫暴雪减速
+        p.speedLevel = Math.min(MAX_SPEED_LEVEL, p.speedLevel + 1);
+        break;
+      case ItemType.Rod: p.rodOn = true; break;
+      case ItemType.Lantern: p.lanternOn = true; break;
+    }
     this.events.push({ type: "itemPicked", playerId: p.id, itemType: item.type });
   }
+
   protected stepBombs(): void {
     const due = this.bombs.filter(b => b.explodeAt <= this.elapsedMs);
     const exploded = new Set<number>();
@@ -193,38 +231,92 @@ export class GameSim {
     this.explosions.push({ id: this.nextId++, cells, expireAt: this.elapsedMs + FLAME_MS });
     this.events.push({ type: "exploded", cells });
 
-    for (const c of cells) {
-      const i = c.gy * GRID_W + c.gx;
-      const existingItem = this.items.get(i); // 火焰烧毁的是爆炸前就存在的道具
-      if (this.grid[i] === Tile.SoftWall) {
-        this.grid[i] = Tile.Floor;
-        const dropped = this.rng() < ITEM_DROP_RATE;
-        const item = dropped
-          ? (this.rng() < 1 / 3 ? ItemType.Bomb : this.rng() < 1 / 2 ? ItemType.Flame : ItemType.Speed)
-          : null;
-        if (item !== null) {
-          this.items.set(i, { id: this.nextId++, gx: c.gx, gy: c.gy, type: item });
-        }
-        this.events.push({ type: "wallBroken", gx: c.gx, gy: c.gy, item });
+    for (const c of cells) this.applyCellHit(c, exploded, "exploded");
+  }
+
+  /** 火焰/闪电压到某一格的共有逻辑 */
+  private applyCellHit(c: Vec, exploded: Set<number> | null, source: "exploded" | "lightningStrike"): void {
+    const i = c.gy * GRID_W + c.gx;
+    const existingItem = this.items.get(i); // 火焰烧毁的是爆炸前就存在的道具
+    if (this.grid[i] === Tile.SoftWall) {
+      this.grid[i] = Tile.Floor;
+      const item = this.rollDrop();
+      if (item !== null) {
+        this.items.set(i, { id: this.nextId++, gx: c.gx, gy: c.gy, type: item });
       }
+      this.events.push({ type: "wallBroken", gx: c.gx, gy: c.gy, item });
+    }
+    if (exploded) {
       const chain = this.bombAt(c.gx, c.gy);
       if (chain) this.explodeBomb(chain, exploded); // 连锁引爆
-      if (existingItem) this.items.delete(i);
-      for (const p of this.players.values()) {
-        if (
-          p.alive &&
-          this.elapsedMs >= p.invincibleUntil &&
-          Math.round(p.x) === c.gx &&
-          Math.round(p.y) === c.gy
-        ) {
-          p.alive = false;
-          this.events.push({ type: "died", playerId: p.id, gx: c.gx, gy: c.gy });
-        }
+    }
+    if (existingItem) this.items.delete(i);
+    for (const p of this.players.values()) {
+      if (
+        p.alive &&
+        this.elapsedMs >= p.invincibleUntil &&
+        !(source === "lightningStrike" && p.rodOn) && // 避雷针免疫闪电
+        Math.round(p.x) === c.gx &&
+        Math.round(p.y) === c.gy
+      ) {
+        p.alive = false;
+        this.events.push({ type: "died", playerId: p.id, gx: c.gx, gy: c.gy });
       }
     }
   }
 
-  /** 认输/断线超时判负：立即结算 */
+  /** 软墙被烧毁后的掉落：对应天气有概率掉天气专属道具 */
+  private rollDrop(): ItemType | null {
+    if (this.weather !== "sunny" && this.rng() < WEATHER_ITEM_RATE) {
+      switch (this.weather) {
+        case "snow": return ItemType.Boots;
+        case "rain": return ItemType.Rod;
+        case "fog": return ItemType.Lantern;
+      }
+    }
+    if (this.rng() >= ITEM_DROP_RATE) return null;
+    const roll = this.rng();
+    return roll < 1 / 3 ? ItemType.Bomb : roll < 2 / 3 ? ItemType.Flame : ItemType.Speed;
+  }
+
+  /** 雷雨天气：周期性闪电，先警告后落下 */
+  protected stepLightning(): void {
+    if (this.weather !== "rain") return;
+    if (this.nextLightningAt < 0) {
+      this.nextLightningAt = this.elapsedMs + LIGHTNING_INTERVAL_MIN;
+      return;
+    }
+    if (this.elapsedMs < this.nextLightningAt) return;
+    this.nextLightningAt =
+      this.elapsedMs + LIGHTNING_INTERVAL_MIN + this.rng() * (LIGHTNING_INTERVAL_MAX - LIGHTNING_INTERVAL_MIN);
+    // 随机选一个非硬墙格
+    const candidates: Vec[] = [];
+    for (let gy = 1; gy < GRID_H - 1; gy++) {
+      for (let gx = 1; gx < GRID_W - 1; gx++) {
+        if (this.grid[gy * GRID_W + gx] !== Tile.HardWall) candidates.push({ gx, gy });
+      }
+    }
+    if (!candidates.length) return;
+    const c = candidates[Math.floor(this.rng() * candidates.length)];
+    const strikeAt = this.elapsedMs + LIGHTNING_WARN_MS;
+    this.pendingStrikes.push({ gx: c.gx, gy: c.gy, strikeAt });
+    this.events.push({ type: "lightningWarn", gx: c.gx, gy: c.gy, strikeAt });
+  }
+
+  private stepPendingStrikes(): void {
+    if (!this.pendingStrikes.length) return;
+    const due = this.pendingStrikes.filter(s => s.strikeAt <= this.elapsedMs);
+    this.pendingStrikes = this.pendingStrikes.filter(s => s.strikeAt > this.elapsedMs);
+    for (const s of due) {
+      this.applyCellHit({ gx: s.gx, gy: s.gy }, null, "lightningStrike");
+      this.events.push({ type: "lightningStrike", gx: s.gx, gy: s.gy, item: null });
+    }
+  }
+
+  protected stepExplosions(): void {
+    this.explosions = this.explosions.filter(e => e.expireAt > this.elapsedMs);
+  }
+
   forfeit(playerId: string): void {
     const p = this.players.get(playerId);
     if (!p || !p.alive || this.phase !== "playing") return;
@@ -267,9 +359,5 @@ export class GameSim {
       this.winnerIds = alive.map(p => p.id);
       this.events.push({ type: "ended", winnerIds: this.winnerIds });
     }
-  }
-
-  protected stepExplosions(): void {
-    this.explosions = this.explosions.filter(e => e.expireAt > this.elapsedMs);
   }
 }

@@ -8,11 +8,11 @@ import { GameSim } from "./gridsim";
 const idx = (gx: number, gy: number) => gy * GRID_W + gx;
 
 /** 造一个双人对局，并把出生点附近的格子清成地板便于走位 */
-function makeSim(playerIds = ["a", "b"]): GameSim {
-  const sim = new GameSim(42, playerIds);
+function makeSim(playerIds = ["a", "b"], weather: ConstructorParameters<typeof GameSim>[3] = "sunny"): GameSim {
+  const sim = new GameSim(42, playerIds, undefined, weather);
   sim.grid[idx(2, 1)] = Tile.Floor;
   sim.grid[idx(1, 2)] = Tile.Floor;
-  sim.grid[idx(11, 2)] = Tile.Floor;
+  sim.grid[idx(13, 2)] = Tile.Floor;
   return sim;
 }
 
@@ -252,5 +252,52 @@ describe("GameSim 胜负与突然死亡", () => {
     expect(sim.players.get("a")!.alive).toBe(true); // 人已挪走
     for (let i = 0; i < SUDDEN_DEATH_STEP_MS / 1000; i++) sim.step(1000);
     expect(sim.grid[idx(3, 2)]).toBe(Tile.HardWall); // 第二圈（gy==2）
+  });
+});
+
+describe("GameSim 天气系统", () => {
+  it("暴雪：移速打 0.65 折", () => {
+    const sim = makeSim(["a"], "snow");
+    sim.grid[idx(3, 1)] = Tile.Floor;
+    sim.grid[idx(4, 1)] = Tile.Floor;
+    sim.setInput("a", "right");
+    for (let i = 0; i < 20; i++) sim.step(50); // 小步长模拟真实帧
+    const x = sim.players.get("a")!.x;
+    expect(x).toBeGreaterThan(3.3); // 确实在移动
+    expect(x).toBeLessThan(3.8);    // 但明显比晴天的 4 格/秒慢
+  });
+
+  it("钉鞋：免疫暴雪减速并加速一档", () => {
+    const sim = makeSim(["a"], "snow");
+    const a = sim.players.get("a")!;
+    sim.items.set(idx(2, 1), { id: 1, gx: 2, gy: 1, type: ItemType.Boots });
+    sim.grid[idx(3, 1)] = Tile.Floor;
+    sim.grid[idx(4, 1)] = Tile.Floor;
+    sim.grid[idx(5, 1)] = Tile.Floor;
+    sim.grid[idx(6, 1)] = Tile.Floor;
+    sim.setInput("a", "right");
+    for (let i = 0; i < 10; i++) sim.step(100);
+    expect(a.bootsOn).toBe(true);
+    expect(a.speedLevel).toBe(2);
+  });
+
+  it("雷雨：泡泡受潮，引信缩短为 0.8 倍", () => {
+    const sim = makeSim(["solo"], "rain");
+    sim.placeBomb("solo");
+    for (let i = 0; i < 19; i++) sim.step(100); // 1900ms
+    expect(sim.bombs).toHaveLength(1);
+    sim.step(200); // 2100ms
+    expect(sim.bombs).toHaveLength(0);
+  });
+
+  it("雷雨：周期性闪电（先警告后落下），避雷针免疫", () => {
+    const sim = makeSim(["a", "b"], "rain");
+    const a = sim.players.get("a")!;
+    a.x = 5; a.y = 5; a.fromX = 5; a.fromY = 5; a.dir = null;
+    sim.players.get("b")!.rodOn = true;
+    for (let i = 0; i < 90; i++) sim.step(100); // 9 秒
+    const events = sim.drainEvents();
+    expect(events.some(e => e.type === "lightningWarn")).toBe(true);
+    expect(events.some(e => e.type === "lightningStrike")).toBe(true);
   });
 });

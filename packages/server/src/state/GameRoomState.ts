@@ -1,5 +1,5 @@
 import { Schema, MapSchema, ArraySchema, type } from "@colyseus/schema";
-import { ItemType } from "@pt/shared";
+import { ItemType, Weather } from "@pt/shared";
 
 export class PlayerState extends Schema {
   @type("string") id = "";
@@ -14,6 +14,10 @@ export class PlayerState extends Schema {
   @type("boolean") alive = true;
   @type("boolean") invincible = false;
   @type("boolean") connected = true;
+  /** 天气专属道具状态 */
+  @type("boolean") bootsOn = false;
+  @type("boolean") rodOn = false;
+  @type("boolean") lanternOn = false;
 }
 
 export class BombState extends Schema {
@@ -42,7 +46,8 @@ export class ItemState extends Schema {
 }
 
 export class GameRoomState extends Schema {
-  @type("string") phase = "waiting";
+  @type("string") phase: string = "waiting";
+  @type("string") weather: string = Weather.Sunny;
   /** 地图布局，每格一个字符 '0' Floor '1' HardWall '2' SoftWall；waiting 阶段为空串 */
   @type("string") grid = "";
   @type("uint32") serverElapsedMs = 0;
