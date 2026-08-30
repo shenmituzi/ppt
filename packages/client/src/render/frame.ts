@@ -61,3 +61,70 @@ export function parseGrid(s: string): Uint8Array {
 }
 
 void FLAME_MS;
+
+// ---------- 联网模式 ----------
+
+import type { Room } from "colyseus.js";
+import type { GameRoomStateView, PlayerStateView } from "../schema-types";
+
+/** 服务器 Schema → 渲染帧；玩家位置做指数平滑（时间常数 ~90ms，画面连续） */
+export class OnlineFrameBuilder {
+  private disp = new Map<string, { x: number; y: number }>();
+  private cachedGrid = "";
+  private gridData: Uint8Array = new Uint8Array(0);
+
+  constructor(private room: Room<GameRoomStateView>) {}
+
+  frame(dtMs: number, nowMs: number): FrameData {
+    void nowMs;
+    const s = this.room.state;
+    if (s.grid !== this.cachedGrid) {
+      this.cachedGrid = s.grid;
+      this.gridData = parseGrid(s.grid);
+    }
+    const smoothK = 1 - Math.exp(-dtMs / 90);
+    const players: PlayerView[] = [];
+    s.players.forEach((p: PlayerStateView, id: string) => {
+      let d = this.disp.get(id);
+      if (!d) {
+        d = { x: p.x, y: p.y };
+        this.disp.set(id, d);
+      }
+      d.x += (p.x - d.x) * smoothK;
+      d.y += (p.y - d.y) * smoothK;
+      players.push({
+        id,
+        x: d.x,
+        y: d.y,
+        colorIndex: p.colorIndex,
+        alive: p.alive,
+        invincible: p.invincible,
+        moving: p.moving,
+      });
+    });
+    for (const id of [...this.disp.keys()]) {
+      if (!s.players.has(id)) this.disp.delete(id);
+    }
+    const bombs: BombView[] = [];
+    s.bombs.forEach((b: any) => bombs.push({ id: b.id, gx: b.gx, gy: b.gy, fuse: b.fuse }));
+    const flames: FlameView[] = [];
+    s.flames.forEach((f: any) => {
+      const cells: Vec[] = [];
+      for (let i = 0; i + 1 < f.cells.length; i += 2) cells.push({ gx: f.cells[i], gy: f.cells[i + 1] });
+      flames.push({ id: f.id, cells, life: f.life });
+    });
+    const items: ItemView[] = [];
+    s.items.forEach((it: any) => items.push({ id: it.id, gx: it.gx, gy: it.gy, type: it.type }));
+    return {
+      grid: this.gridData,
+      players,
+      bombs,
+      flames,
+      items,
+      phase: s.phase,
+      elapsedMs: s.serverElapsedMs,
+      suddenDeathAt: s.suddenDeathAt,
+      winnerIds: [...s.winnerIds],
+    };
+  }
+}

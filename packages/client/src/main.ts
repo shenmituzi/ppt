@@ -1,7 +1,9 @@
 import { GameSim } from "@pt/shared";
 import { makeInputHub } from "./input";
 import { Renderer, type GhostView } from "./render/renderer";
-import { simToFrame, type FrameData } from "./render/frame";
+import { simToFrame, OnlineFrameBuilder, type FrameData } from "./render/frame";
+import type { Room } from "colyseus.js";
+import { colyseus } from "./net";
 
 function showScreen(id: string) {
   for (const el of document.querySelectorAll(".screen")) el.classList.add("hidden");
@@ -67,4 +69,24 @@ function enterLocalGame(playerId = "me") {
   runGameLoop(() => simToFrame(sim), playerId);
 }
 
-enterLocalGame(); // Task 14 改为先进大厅
+/** 在线对战 */
+export async function enterOnlineGame(room: Room<any>) {
+  room.send("setName", localStorage.getItem("pt-name") || "无名氏");
+  hub.setHandlers({
+    onDir: d => room.send("dir", { dir: d }),
+    onBomb: () => room.send("bomb"),
+  });
+  const builder = new OnlineFrameBuilder(room);
+  runGameLoop((dt, now) => builder.frame(dt, now), room.sessionId);
+}
+
+// Task 14 前的临时入口：URL 带 ?online=1 时快速匹配一个 2 人局
+const params = new URLSearchParams(location.search);
+if (params.get("online")) {
+  colyseus
+    .joinOrCreate("game", { mode: 2 })
+    .then(enterOnlineGame)
+    .catch(err => console.error("进入房间失败", err));
+} else {
+  enterLocalGame();
+}
