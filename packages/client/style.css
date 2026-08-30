@@ -170,3 +170,6 @@ body {
   #hud { font-size: 13px; min-height: 24px; }
   #hint { display: none; } /* 触屏设备不需要键盘提示 */
 }
+
+.btn.adventure { background: linear-gradient(180deg, #7d5fff, #5a3fd0); color: #fff;
+  box-shadow: 0 5px 14px rgba(122, 82, 255, .35), inset 0 1px 0 rgba(255, 255, 255, .3); }

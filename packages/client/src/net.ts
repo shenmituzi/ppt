@@ -16,6 +16,11 @@ export function quickMatch(mode: 2 | 4): Promise<Room> {
   return colyseus.joinOrCreate("game", { mode });
 }
 
+/** 冒险模式：5 人席位（真人+人机补位） */
+export function adventureMatch(): Promise<Room> {
+  return colyseus.joinOrCreate("game", { mode: 5, gameType: "adventure" });
+}
+
 /** 创建房间；房间号由服务器通过 code 消息回发给房主 */
 export async function createRoom(): Promise<{ room: Room; code: string }> {
   const room = await colyseus.create("game", {});

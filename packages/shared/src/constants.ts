@@ -93,3 +93,22 @@ export const SPAWNS = [
   { gx: 1, gy: GRID_H - 2 },
   { gx: GRID_W - 2, gy: GRID_H - 2 },
 ] as const;
+
+// ---------- 冒险模式 ----------
+
+export type GameType = "pvp" | "adventure";
+export const ADVENTURE_PLAYERS = 5; // 冒险模式总席位（真人+人机）
+export const GATHER_MS = 120_000; // 装备搜集期时长
+
+export const SCATTER_ITEMS = 14; // 开局散落在地图上的道具数
+
+export const MONSTER_BASE_HP = 18;
+export const MONSTER_HP_PER_LEVEL = 8;
+export const MONSTER_BASE_SPEED = 1.7; // 格/秒
+export const MONSTER_SPEED_PER_LEVEL = 0.15;
+export const MONSTER_MAX_SPEED = 3.4;
+export const MONSTER_MAX_COUNT = 9;
+export const HOUSE_MAX_HP = 12; // 每次爆炸命中 -2
+export const HOUSE_HEAL_PER_SEC = 3;
+export const MONSTER_RETREAT_RATIO = 0.3; // 血量低于 30% 回屋
+export const BUFF_DECAY_MS = 40_000; // 装备损耗：每 40 秒属性 -1

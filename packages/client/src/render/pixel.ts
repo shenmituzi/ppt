@@ -338,6 +338,62 @@ function ice(): HTMLCanvasElement {
   });
 }
 
+// ---------- 怪物与怪物屋（冒险模式） ----------
+
+function monster(): HTMLCanvasElement {
+  return sprite(p => {
+    // 身体：紫色圆胖怪
+    p.circle(7.5, 9, 5.5, "#8e44ad");
+    p.circle(7.5, 10.5, 4.5, "#6c3483");
+    // 角
+    p.px(3, 3, "#6c3483");
+    p.px(2, 2, "#6c3483");
+    p.px(4, 2, "#6c3483");
+    p.px(12, 3, "#6c3483");
+    p.px(13, 2, "#6c3483");
+    p.px(11, 2, "#6c3483");
+    // 眼睛（白底红瞳，凶）
+    p.rect(4, 7, 2, 2, "#ffffff");
+    p.rect(9, 7, 2, 2, "#ffffff");
+    p.px(5, 8, "#e74c3c");
+    p.px(10, 8, "#e74c3c");
+    // 嘴（獠牙）
+    p.rect(6, 11, 4, 1, "#2c1533");
+    p.px(6, 11, "#ffffff");
+    p.px(9, 11, "#ffffff");
+    p.outline(OUTLINE);
+  });
+}
+
+function house(destroyed: boolean): HTMLCanvasElement {
+  const roofA = destroyed ? "#5d5d5d" : "#b03a2e";
+  const roofB = destroyed ? "#4a4a4a" : "#8e2b22";
+  const wallA = destroyed ? "#6b6b6b" : "#b8823f";
+  const wallB = destroyed ? "#525252" : "#8f5e2a";
+  return sprite(p => {
+    // 屋顶（三角）
+    for (let r = 0; r < 6; r++) {
+      p.rect(2 + r, 2 + r, PX - 4 - r * 2, 1, r % 2 === 0 ? roofA : roofB);
+    }
+    // 墙体
+    p.rect(2, 8, 12, 7, wallA);
+    p.rect(2, 8, 1, 7, roofB);
+    p.rect(13, 8, 1, 7, roofB);
+    // 门（完好的屋有发亮的门，打坏后是黑洞）
+    p.rect(6, 10, 4, 5, destroyed ? "#1c1c1c" : "#3a2410");
+    if (!destroyed) {
+      p.px(7, 11, "#ffd88a");
+      p.px(8, 12, "#ffd88a");
+    }
+    // 破损裂纹
+    if (destroyed) {
+      p.px(5, 9, "#333333");
+      p.px(10, 11, "#333333");
+      p.px(9, 13, "#333333");
+    }
+  });
+}
+
 // ---------- 汇总 ----------
 
 export const PIX = {
@@ -349,4 +405,6 @@ export const PIX = {
   bomb: [bomb(false), bomb(true)],
   flame: [flame(false), flame(true)], // [中心, 臂]
   items: [item(0), item(1), item(2), item(3), item(4), item(5)] as HTMLCanvasElement[],
+  monster: monster(),
+  house: [house(false), house(true)], // [完好, 损毁]
 };

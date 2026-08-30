@@ -45,16 +45,39 @@ export class ItemState extends Schema {
   @type("uint8") type = ItemType.Bomb;
 }
 
+export class MonsterState extends Schema {
+  @type("string") id = "";
+  @type("float32") x = 0;
+  @type("float32") y = 0;
+  @type("uint8") hp = 1;
+  @type("uint8") maxHp = 1;
+  @type("uint8") level = 1;
+  @type("string") state = "hunt";
+}
+
+export class HouseState extends Schema {
+  @type("string") id = "";
+  @type("int8") gx = 0;
+  @type("int8") gy = 0;
+  @type("uint8") hp = 1;
+  @type("uint8") maxHp = 1;
+  @type("boolean") destroyed = false;
+}
+
 export class GameRoomState extends Schema {
   @type("string") phase: string = "waiting";
+  @type("string") gameType: string = "pvp";
   @type("string") weather: string = Weather.Sunny;
-  /** 地图布局，每格一个字符 '0' Floor '1' HardWall '2' SoftWall；waiting 阶段为空串 */
+  /** 地图布局，每格一个字符 '0' Floor '1' HardWall '2' 木箱 '3' 水晶 '4' 石头 '5' 冰块；waiting 阶段为空串 */
   @type("string") grid = "";
   @type("uint32") serverElapsedMs = 0;
   @type("uint32") suddenDeathAt = 0;
+  @type("uint32") gatherEndsAt = 0;
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
   @type({ map: BombState }) bombs = new MapSchema<BombState>();
   @type({ map: FlameState }) flames = new MapSchema<FlameState>();
   @type({ map: ItemState }) items = new MapSchema<ItemState>();
+  @type({ map: MonsterState }) monsters = new MapSchema<MonsterState>();
+  @type({ map: HouseState }) houses = new MapSchema<HouseState>();
   @type(["string"]) winnerIds = new ArraySchema<string>();
 }

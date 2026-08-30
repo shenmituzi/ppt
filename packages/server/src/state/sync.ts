@@ -1,6 +1,7 @@
 import { GameSim } from "@pt/shared";
 import {
   GameRoomState, PlayerState, BombState, FlameState, ItemState,
+  MonsterState, HouseState,
 } from "./GameRoomState";
 
 export function gridToString(grid: Uint8Array): string {
@@ -12,6 +13,8 @@ export function gridToString(grid: Uint8Array): string {
 /** 把 GameSim 的当前状态逐字段拷进 Schema；Map 做差量增删 */
 export function syncState(state: GameRoomState, sim: GameSim): void {
   state.serverElapsedMs = Math.floor(sim.elapsedMs);
+  state.phase = sim.phase;
+  state.gameType = sim.gameType;
 
   for (const [id, p] of sim.players) {
     let ps = state.players.get(id);
@@ -90,8 +93,49 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
     if (!itemIds.has(key)) state.items.delete(key);
   }
 
-  // 结算兜底：ended 由 checkEnd 产生，这里把结果写进 Schema
-  if (sim.phase === "ended" && state.phase !== "ended") {
+  // 冒险模式：怪物与房屋
+  const monsterIds = new Set<string>();
+  for (const m of sim.monsters) {
+    const key = String(m.id);
+    monsterIds.add(key);
+    let ms = state.monsters.get(key);
+    if (!ms) {
+      ms = new MonsterState();
+      ms.id = key;
+      state.monsters.set(key, ms);
+    }
+    ms.x = m.x;
+    ms.y = m.y;
+    ms.hp = Math.max(0, m.hp);
+    ms.maxHp = m.maxHp;
+    ms.level = m.level;
+    ms.state = m.state;
+  }
+  for (const key of [...state.monsters.keys()]) {
+    if (!monsterIds.has(key)) state.monsters.delete(key);
+  }
+  const houseIds = new Set<string>();
+  for (const h of sim.houses) {
+    const key = String(h.id);
+    houseIds.add(key);
+    let hs = state.houses.get(key);
+    if (!hs) {
+      hs = new HouseState();
+      hs.id = key;
+      hs.gx = h.gx;
+      hs.gy = h.gy;
+      hs.maxHp = h.maxHp;
+      state.houses.set(key, hs);
+    }
+    hs.hp = Math.max(0, h.hp);
+    hs.destroyed = h.destroyed;
+  }
+  for (const key of [...state.houses.keys()]) {
+    if (!houseIds.has(key)) state.houses.delete(key);
+  }
+
+  // 结算：ended 时写入胜者
+  if (sim.phase === "ended") {
     state.phase = "ended";
     state.winnerIds.splice(0, state.winnerIds.length, ...sim.winnerIds);
   }

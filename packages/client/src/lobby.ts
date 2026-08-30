@@ -1,5 +1,5 @@
 import type { Room } from "colyseus.js";
-import { quickMatch, createRoom, joinByCode } from "./net";
+import { quickMatch, createRoom, joinByCode, adventureMatch } from "./net";
 import type { GameRoomStateView } from "./schema-types";
 
 type GameRoom = Room<GameRoomStateView>;
@@ -16,13 +16,13 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
   const guard = (fn: () => Promise<void>) =>
     fn().catch(e => say(`❌ ${e instanceof Error ? e.message : String(e)}`));
 
-  /** 监听房间进入 playing → 进入游戏画面（只触发一次）；进房即报昵称 */
+  /** 监听房间开局（playing 或冒险的 gathering）→ 进入游戏画面；进房即报昵称 */
   function watchAndEnter(room: GameRoom) {
     room.send("setName", localStorage.getItem("pt-name") || "无名氏");
     let entered = false;
     const check = () => {
-      // 状态补丁在对局中会以 15Hz 持续到达，onEnter 绝不能重复执行
-      if (entered || room.state.phase !== "playing") return;
+      // 状态补丁在对局中会持续到达，onEnter 绝不能重复执行
+      if (entered || room.state.phase === "waiting") return;
       entered = true;
       room.onStateChange.remove(check);
       onEnter(room);
@@ -90,6 +90,11 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
 
   document.getElementById("btn-quick2")!.onclick = () => startQuick(2);
   document.getElementById("btn-quick4")!.onclick = () => startQuick(4);
+  document.getElementById("btn-adventure")!.onclick = () =>
+    guard(async () => {
+      say("冒险匹配中…（凑不齐 5 人会由人机补位）");
+      watchAndEnter(await adventureMatch());
+    });
   document.getElementById("btn-create")!.onclick = () =>
     guard(async () => {
       say("创建中…");

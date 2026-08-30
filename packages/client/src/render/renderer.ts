@@ -53,9 +53,46 @@ export class Renderer {
     for (const b of f.bombs) this.drawBomb(b.gx, b.gy, b.fuse, nowMs);
     for (const fl of f.flames) this.drawFlame(fl, nowMs);
     for (const g of ghosts) this.drawGhost(g, nowMs);
+    for (const m of f.monsters) this.drawMonster(m, nowMs);
+    for (const h of f.houses) this.drawHouse(h);
     for (const p of f.players) this.drawPlayer(p, nowMs);
     this.drawSkyWeather(f, nowMs, viewer); // 雨/雪/雾/闪电覆盖在最上层
     this.drawVignette();
+  }
+
+  /** 怪物：本体 + 头顶血条 */
+  private drawMonster(m: FrameData["monsters"][number], nowMs: number) {
+    const { ctx } = this;
+    const cx = center(m.x);
+    const cy = center(m.y);
+    ctx.fillStyle = "rgba(0,0,0,.25)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + TILE * 0.34, TILE * 0.3, TILE * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.drawImage(PIX.monster, cx - TILE / 2, cy - TILE / 2, TILE, TILE);
+    // 血条
+    const w = TILE * 0.8;
+    const ratio = Math.max(0, Math.min(1, m.hp / m.maxHp));
+    ctx.fillStyle = "rgba(0,0,0,.55)";
+    ctx.fillRect(cx - w / 2, cy - TILE * 0.72, w, 4);
+    ctx.fillStyle = ratio > 0.5 ? "#2ecc71" : ratio > 0.25 ? "#f39c12" : "#e74c3c";
+    ctx.fillRect(cx - w / 2, cy - TILE * 0.72, w * ratio, 4);
+  }
+
+  /** 怪物屋：血条 + 完好/损毁两态 */
+  private drawHouse(h: FrameData["houses"][number]) {
+    const { ctx } = this;
+    const x = h.gx * TILE;
+    const y = h.gy * TILE;
+    ctx.drawImage(PIX.house[h.destroyed ? 1 : 0], x, y, TILE, TILE);
+    if (!h.destroyed) {
+      const w = TILE * 0.8;
+      const ratio = Math.max(0, Math.min(1, h.hp / h.maxHp));
+      ctx.fillStyle = "rgba(0,0,0,.55)";
+      ctx.fillRect(x + (TILE - w) / 2, y - 5, w, 4);
+      ctx.fillStyle = "#4aa3ff";
+      ctx.fillRect(x + (TILE - w) / 2, y - 5, w * ratio, 4);
+    }
   }
 
   private drawTiles(grid: Uint8Array) {

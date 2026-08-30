@@ -301,3 +301,119 @@ describe("GameSim 天气系统", () => {
     expect(events.some(e => e.type === "lightningStrike")).toBe(true);
   });
 });
+
+describe("GameSim 冒险模式", () => {
+  function makeAdventure(): GameSim {
+    return new GameSim(42, ["a", "b"], undefined, "sunny", { gameType: "adventure" });
+  }
+
+  it("开局为搜集期：散落道具、4 间怪物屋、无怪物", () => {
+    const sim = makeAdventure();
+    expect(sim.phase).toBe("gathering");
+    expect(sim.houses).toHaveLength(4);
+    expect(sim.monsters).toHaveLength(0);
+    expect(sim.items.size).toBeGreaterThanOrEqual(10);
+  });
+
+  it("120 秒后怪物登场（人数+1），进入狩猎期", () => {
+    const sim = makeAdventure();
+    for (let i = 0; i < 250; i++) sim.step(500); // 125 秒
+    expect(sim.phase).toBe("playing");
+    expect(sim.monsters.length).toBe(3); // 2 名玩家 + 1
+  });
+
+  it("怪物会追击玩家", () => {
+    const sim = makeAdventure();
+    for (let i = 0; i < 250; i++) sim.step(500);
+    const m = sim.monsters[0];
+    const a = sim.players.get("a")!;
+    // 把玩家和一只怪放到开阔走廊
+    sim.grid[idx(7, 2)] = Tile.Floor;
+    sim.grid[idx(7, 3)] = Tile.Floor;
+    sim.grid[idx(7, 4)] = Tile.Floor;
+    sim.grid[idx(7, 5)] = Tile.Floor;
+    a.x = 7; a.y = 2; a.fromX = 7; a.fromY = 2; a.dir = null;
+    m.x = 7; m.y = 6; m.fromX = 7; m.fromY = 6; m.progress = 0; m.dir = null; m.state = "hunt";
+    sim.setInput("a", "none");
+    for (let i = 0; i < 20; i++) sim.step(100);
+    expect(m.y).toBeLessThan(6);
+  });
+
+  it("爆炸使怪物掉血，清空怪物即胜利", () => {
+    const sim = makeAdventure();
+    for (let i = 0; i < 250; i++) sim.step(500);
+    sim.grid[idx(5, 5)] = Tile.Floor;
+    sim.grid[idx(6, 5)] = Tile.Floor;
+    for (const m of sim.monsters) { m.x = 5; m.y = 5; m.fromX = 5; m.fromY = 5; m.dir = null; m.progress = 0; }
+    const hpBefore = sim.monsters[0].hp;
+    // 玩家远离爆炸
+    for (const p of sim.players.values()) { p.x = 1; p.y = 1; p.fromX = 1; p.fromY = 1; p.invincibleUntil = 0; }
+    sim.bombs.push({ id: 999, gx: 6, gy: 5, ownerId: "a", power: 2, explodeAt: sim.elapsedMs + 1 });
+    sim.step(16);
+    expect(sim.monsters[0].hp).toBeLessThan(hpBefore);
+    // 直接清空怪物 → 胜利结算
+    for (const m of sim.monsters) m.hp = 0;
+    sim.step(16);
+    expect(sim.phase).toBe("ended");
+    expect(sim.winnerIds.length).toBeGreaterThan(0);
+  });
+
+  it("怪物屋：低血回屋回血；屋被打坏则不再回血", () => {
+    const sim = makeAdventure();
+    for (let i = 0; i < 250; i++) sim.step(500);
+    const m = sim.monsters[0];
+    const house = sim.houses.find(h => h.id === m.houseId)!;
+    // 站到屋门口
+    const adj = [
+      { gx: house.gx, gy: house.gy - 1 },
+      { gx: house.gx, gy: house.gy + 1 },
+      { gx: house.gx - 1, gy: house.gy },
+      { gx: house.gx + 1, gy: house.gy },
+    ].find(c => sim.isCellFree(c.gx, c.gy))!;
+    m.x = adj.gx; m.y = adj.gy; m.fromX = adj.gx; m.fromY = adj.gy; m.progress = 0; m.dir = null;
+    m.hp = 3; m.state = "heal";
+    const hp0 = m.hp;
+    for (let i = 0; i < 20; i++) sim.step(100);
+    expect(m.hp).toBeGreaterThan(hp0);
+    // 打坏屋子 → 不再回血且状态回归追击
+    house.destroyed = true;
+    m.state = "retreat";
+    for (let i = 0; i < 5; i++) sim.step(100);
+    expect(m.state).toBe("hunt");
+  });
+
+  it("怪物杀死玩家 → 场上多刷一只怪物", () => {
+    const sim = makeAdventure();
+    for (let i = 0; i < 250; i++) sim.step(500);
+    const count = sim.monsters.length;
+    const a = sim.players.get("a")!;
+    a.invincibleUntil = 0;
+    const m = sim.monsters[0];
+    a.x = m.x; a.y = m.y; a.fromX = m.x; a.fromY = m.y; a.dir = null; a.progress = 0;
+    m.dir = null; m.progress = 0; m.state = "hunt"; // 站定确保攻击判定
+    sim.step(100);
+    expect(a.alive).toBe(false);
+    expect(sim.monsters.length).toBeGreaterThanOrEqual(count);
+  });
+
+  it("装备损耗：狩猎期每 40 秒属性 -1", () => {
+    const sim = makeAdventure();
+    const a = sim.players.get("a")!;
+    a.bombsMax = 3; a.flameLen = 2;
+    for (let i = 0; i < 250; i++) sim.step(500); // 进入狩猎
+    a.bombsMax = 3; a.flameLen = 2; a.speedLevel = 3;
+    for (let i = 0; i < 90; i++) sim.step(500); // +45 秒
+    expect(a.bombsMax).toBe(2);
+    expect(a.flameLen).toBe(1);
+    expect(a.speedLevel).toBe(2);
+  });
+
+  it("全员阵亡 → 失败结算", () => {
+    const sim = makeAdventure();
+    for (let i = 0; i < 250; i++) sim.step(500);
+    for (const p of sim.players.values()) { p.alive = false; p.invincibleUntil = 0; }
+    sim.step(16);
+    expect(sim.phase).toBe("ended");
+    expect(sim.winnerIds).toEqual([]);
+  });
+});

@@ -73,14 +73,19 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     const viewer = me && me.alive ? { x: me.x, y: me.y, lantern: !!me.lanternOn } : null;
     renderer.draw(f, now, [...ghosts.values()], viewer);
 
-    // HUD（三枚信息胶囊：天气 / 存活 / 倒计时）
+    // HUD（三枚信息胶囊：天气 / 存活 / 阶段信息）
     hudWx.textContent = WEATHER_LABEL[f.weather as WeatherType] ?? "☀️ 晴朗";
-    if (f.elapsedMs >= f.suddenDeathAt) {
-      hudAlive.textContent = `存活 ${f.players.filter(p => p.alive).length}`;
+    hudAlive.textContent = `存活 ${f.players.filter(p => p.alive).length}`;
+    if (f.phase === "gathering") {
+      hudTime.textContent = `🎁 装备搜集 ${Math.max(0, Math.ceil((f.gatherEndsAt - f.elapsedMs) / 1000))}s`;
+      hudTime.classList.remove("danger");
+    } else if (f.gameType === "adventure") {
+      hudTime.textContent = `👾 剩余怪物 ${f.monsters.length}`;
+      hudTime.classList.remove("danger");
+    } else if (f.elapsedMs >= f.suddenDeathAt) {
       hudTime.textContent = "⚠ 突然死亡！";
       hudTime.classList.add("danger");
     } else {
-      hudAlive.textContent = `存活 ${f.players.filter(p => p.alive).length}`;
       hudTime.textContent = `⏱ 突然死亡 ${Math.ceil((f.suddenDeathAt - f.elapsedMs) / 1000)}s`;
       hudTime.classList.remove("danger");
     }
@@ -88,10 +93,16 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     // 结算
     if (f.phase === "ended" && overlay.classList.contains("hidden")) {
       const win = f.winnerIds.includes(myId);
-      sfx.play(win ? "win" : "lose");
-      overlay.innerHTML = f.winnerIds.length
-        ? `<div class="result ${win ? "win" : "lose"}">${win ? "🏆 胜利！" : "💥 失败"}</div><button onclick="location.reload()">返回大厅</button>`
-        : `<div class="result draw">🤝 平局</div><button onclick="location.reload()">返回大厅</button>`;
+      const adventureWin = f.gameType === "adventure" && f.winnerIds.length > 0;
+      if (win || adventureWin) sfx.play("win");
+      else sfx.play("lose");
+      const cls = f.winnerIds.length ? (win || adventureWin ? "win" : "lose") : "draw";
+      const title = f.gameType === "adventure"
+        ? (f.winnerIds.length ? "🏆 击败所有怪物！" : "💀 全军覆没")
+        : f.winnerIds.length
+          ? (win ? "🏆 胜利！" : "💥 失败")
+          : "🤝 平局";
+      overlay.innerHTML = `<div class="result ${cls}">${title}</div><button onclick="location.reload()">返回大厅</button>`;
       overlay.classList.remove("hidden");
     }
     requestAnimationFrame(loop);

@@ -22,6 +22,15 @@ export interface ItemView { id: string; gx: number; gy: number; type: ItemType }
 export interface WarnView { gx: number; gy: number; strikeAt: number }
 export interface StrikeView { gx: number; gy: number; at: number }
 
+export interface MonsterView {
+  id: string; x: number; y: number;
+  hp: number; maxHp: number; level: number; state: string;
+}
+export interface HouseView {
+  id: string; gx: number; gy: number;
+  hp: number; maxHp: number; destroyed: boolean;
+}
+
 export interface FrameData {
   grid: Uint8Array;
   players: PlayerView[];
@@ -30,15 +39,19 @@ export interface FrameData {
   items: ItemView[];
   warnings: WarnView[];
   strikes: StrikeView[];
+  monsters: MonsterView[];
+  houses: HouseView[];
   /** 全屏闪电白闪强度 0~1 */
   flash: number;
   weather: string;
   phase: Phase;
+  gameType: string;
   elapsedMs: number;
+  gatherEndsAt: number;
   suddenDeathAt: number;
   winnerIds: string[];
 }
-type Phase = "waiting" | "playing" | "ended";
+type Phase = "waiting" | "gathering" | "playing" | "ended";
 
 /** 单机模式：直接从 GameSim 构造渲染帧 */
 export function simToFrame(sim: GameSim): FrameData {
@@ -68,7 +81,17 @@ export function simToFrame(sim: GameSim): FrameData {
     flash: 0,
     weather: sim.weather,
     phase: sim.phase,
+    gameType: sim.gameType,
+    monsters: sim.monsters.map(m => ({
+      id: String(m.id), x: m.x, y: m.y,
+      hp: m.hp, maxHp: m.maxHp, level: m.level, state: m.state,
+    })),
+    houses: sim.houses.map(h => ({
+      id: String(h.id), gx: h.gx, gy: h.gy,
+      hp: h.hp, maxHp: h.maxHp, destroyed: h.destroyed,
+    })),
     elapsedMs: sim.elapsedMs,
+    gatherEndsAt: sim.gatherEndsAt,
     suddenDeathAt: SUDDEN_DEATH_AT_MS,
     winnerIds: sim.winnerIds,
   };
@@ -151,18 +174,30 @@ export class OnlineFrameBuilder {
     });
     const items: ItemView[] = [];
     s.items.forEach((it: any) => items.push({ id: it.id, gx: it.gx, gy: it.gy, type: it.type }));
+    const monsters: MonsterView[] = [];
+    s.monsters.forEach((m: any) => monsters.push({
+      id: m.id, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp, level: m.level, state: m.state,
+    }));
+    const houses: HouseView[] = [];
+    s.houses.forEach((h: any) => houses.push({
+      id: h.id, gx: h.gx, gy: h.gy, hp: h.hp, maxHp: h.maxHp, destroyed: h.destroyed,
+    }));
     return {
       grid: this.gridData,
       players,
       bombs,
       flames,
       items,
+      monsters,
+      houses,
       warnings: this.warns.filter(w => s.serverElapsedMs < w.strikeAt + 500),
       strikes: this.strikes.filter(st => nowMs - st.at < 300),
       flash: nowMs < this.flashUntil ? (this.flashUntil - nowMs) / 220 : 0,
       weather: s.weather,
       phase: s.phase,
+      gameType: s.gameType,
       elapsedMs: s.serverElapsedMs,
+      gatherEndsAt: s.gatherEndsAt,
       suddenDeathAt: s.suddenDeathAt,
       winnerIds: [...s.winnerIds],
     };
