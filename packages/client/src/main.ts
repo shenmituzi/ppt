@@ -3,7 +3,8 @@ import { makeInputHub } from "./input";
 import { Renderer, type GhostView } from "./render/renderer";
 import { simToFrame, OnlineFrameBuilder, type FrameData } from "./render/frame";
 import type { Room } from "colyseus.js";
-import { colyseus } from "./net";
+import { saveReconnect, tryReconnect } from "./net";
+import { initLobby } from "./lobby";
 
 function showScreen(id: string) {
   for (const el of document.querySelectorAll(".screen")) el.classList.add("hidden");
@@ -22,18 +23,11 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   const ghosts = new Map<string, GhostView>();
   let last = performance.now();
   let prevAlive = new Set<string>(); // 上一帧仍存活的角色
-  // 调试钩子：后台标签页 rAF 被节流时手动渲染一帧（大厅接管后移除）
-  (window as any).__renderOnce = () => {
-    const now = performance.now();
-    const f = getFrame(Math.min(50, now - last), now);
-    renderer.draw(f, now, [...ghosts.values()]);
-  };
 
   function loop(now: number) {
     const dt = Math.min(50, now - last);
     last = now;
     const f = getFrame(dt, now);
-    (window as any).__lastFrame = f; // 调试句柄（大厅接管后移除）
 
     // 死亡瞬间 → 生成幽灵（上一帧活着、这一帧死了）
     const aliveNow = new Set(f.players.filter(p => p.alive).map(p => p.id));
@@ -65,10 +59,9 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   requestAnimationFrame(loop);
 }
 
-/** 单机练习 */
+/** 单机练习：规则引擎跑在浏览器本地 */
 function enterLocalGame(playerId = "me") {
   const sim = new GameSim((Math.random() * 2 ** 31) | 0, [playerId]);
-  (window as any).__sim = sim; // 调试句柄（联机入口接管后移除）
   hub.setHandlers({
     onDir: d => sim.setInput(playerId, d),
     onBomb: () => sim.placeBomb(playerId),
@@ -76,9 +69,9 @@ function enterLocalGame(playerId = "me") {
   runGameLoop(() => simToFrame(sim), playerId);
 }
 
-/** 在线对战 */
-export async function enterOnlineGame(room: Room<any>) {
-  (window as any).__room = room; // 调试句柄（大厅接管后移除）
+/** 在线对战：规则引擎跑在服务器，客户端收发输入与状态 */
+async function enterOnlineGame(room: Room<any>) {
+  saveReconnect(room);
   room.send("setName", localStorage.getItem("pt-name") || "无名氏");
   hub.setHandlers({
     onDir: d => room.send("dir", { dir: d }),
@@ -88,13 +81,12 @@ export async function enterOnlineGame(room: Room<any>) {
   runGameLoop((dt, now) => builder.frame(dt, now), room.sessionId);
 }
 
-// Task 14 前的临时入口：URL 带 ?online=1 时快速匹配一个 2 人局
-const params = new URLSearchParams(location.search);
-if (params.get("online")) {
-  colyseus
-    .joinOrCreate("game", { mode: 2 })
-    .then(enterOnlineGame)
-    .catch(err => console.error("进入房间失败", err));
-} else {
-  enterLocalGame();
-}
+// 启动：有未完成的对局先重连，否则进大厅
+tryReconnect().then(room => {
+  if (room) {
+    enterOnlineGame(room);
+  } else {
+    document.getElementById("screen-lobby")!.classList.remove("hidden");
+    initLobby(enterOnlineGame, () => enterLocalGame());
+  }
+});
