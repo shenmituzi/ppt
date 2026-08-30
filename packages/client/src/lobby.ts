@@ -16,11 +16,16 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
   const guard = (fn: () => Promise<void>) =>
     fn().catch(e => say(`❌ ${e instanceof Error ? e.message : String(e)}`));
 
-  /** 监听房间进入 playing → 进入游戏画面；进房即报昵称 */
+  /** 监听房间进入 playing → 进入游戏画面（只触发一次）；进房即报昵称 */
   function watchAndEnter(room: GameRoom) {
     room.send("setName", localStorage.getItem("pt-name") || "无名氏");
+    let entered = false;
     const check = () => {
-      if (room.state.phase === "playing") onEnter(room);
+      // 状态补丁在对局中会以 15Hz 持续到达，onEnter 绝不能重复执行
+      if (entered || room.state.phase !== "playing") return;
+      entered = true;
+      room.onStateChange.remove(check);
+      onEnter(room);
     };
     room.onStateChange(check);
     check();
@@ -42,7 +47,11 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
     let hinted = false;
     let timer: ReturnType<typeof setInterval> | undefined;
     const refresh = () => {
-      if (room.state.phase === "playing" && timer) clearInterval(timer); // 已开局，停止轮询
+      if (room.state.phase === "playing" && timer) {
+        // 已开局：停止轮询并退订状态监听
+        clearInterval(timer);
+        room.onStateChange.remove(refresh);
+      }
       const names: string[] = [];
       room.state.players.forEach(p => names.push(p.name));
       info.textContent = withStart

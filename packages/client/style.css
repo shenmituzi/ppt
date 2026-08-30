@@ -1,8 +1,12 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  overscroll-behavior: none; /* 防止手机上下拉动回弹 */
+}
 body {
   background: #1b2430; color: #eee;
   font-family: "Microsoft YaHei", system-ui, sans-serif;
   display: flex; justify-content: center; padding-top: 24px;
+  -webkit-user-select: none; user-select: none;
 }
 .screen.hidden { display: none !important; }
 #screen-lobby { width: 320px; display: flex; flex-direction: column; gap: 12px; }
@@ -25,3 +29,45 @@ body {
 #overlay.hidden { display: none; }
 #overlay button { padding: 8px 24px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; }
 #hint { margin-top: 8px; color: #889; font-size: 13px; }
+
+/* ---------- 触屏操作层 ---------- */
+#touch-layer {
+  position: fixed; inset: 0; pointer-events: none; z-index: 50;
+}
+#joy-zone {
+  position: absolute; left: 0; bottom: 0;
+  width: 45vw; max-width: 240px; height: 45vh; max-height: 240px;
+  touch-action: none; pointer-events: auto;
+}
+#joy-base {
+  position: absolute; width: 108px; height: 108px; margin: -54px 0 0 -54px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.10);
+  border: 2px solid rgba(255,255,255,.25);
+}
+#joy-knob {
+  position: absolute; left: 50%; top: 50%;
+  width: 52px; height: 52px; margin: -26px 0 0 -26px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.45);
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+}
+#joy-base.hidden { display: none; }
+#bomb-btn {
+  position: absolute; right: 22px; bottom: 30px;
+  width: 84px; height: 84px; border-radius: 50%;
+  font-size: 40px; line-height: 80px; text-align: center;
+  background: rgba(231, 76, 60, .55);
+  border: 2px solid rgba(255,255,255,.35);
+  touch-action: none; pointer-events: auto;
+  -webkit-touch-callout: none;
+}
+#bomb-btn:active { background: rgba(231, 76, 60, .85); }
+
+/* 手机小屏：地图按屏宽缩放 */
+@media (max-width: 460px) {
+  body { padding-top: 8px; align-items: flex-start; }
+  #game { width: calc(100vw - 8px); height: auto; }
+  #hud { font-size: 13px; height: 22px; }
+  #hint { display: none; } /* 触屏设备不需要键盘提示 */
+}

@@ -1,5 +1,6 @@
 import { GameSim } from "@pt/shared";
 import { makeInputHub } from "./input";
+import { createTouchControls } from "./touch";
 import { Renderer, type GhostView } from "./render/renderer";
 import { simToFrame, OnlineFrameBuilder, type FrameData } from "./render/frame";
 import type { Room } from "colyseus.js";
@@ -13,6 +14,7 @@ function showScreen(id: string) {
 }
 
 const hub = makeInputHub();
+createTouchControls(hub); // 触屏设备显示虚拟摇杆 + 炸弹按钮
 
 /** 游戏画面公共循环：getFrame 每帧产出一个 FrameData（单机/在线共用） */
 function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId: string) {
@@ -84,6 +86,9 @@ function enterLocalGame(playerId = "me") {
 /** 在线对战：规则引擎跑在服务器，客户端收发输入与状态 */
 async function enterOnlineGame(room: Room<any>) {
   saveReconnect(room);
+  if (new URLSearchParams(location.search).has("debug")) {
+    (window as any).__room = room; // 调试：?debug=1 时暴露房间状态
+  }
   room.send("setName", localStorage.getItem("pt-name") || "无名氏");
   hub.setHandlers({
     onDir: d => room.send("dir", { dir: d }),

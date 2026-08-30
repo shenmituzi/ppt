@@ -45,12 +45,20 @@ export function attachInput(handlers: InputHandlers): void {
   });
 }
 
-/** 输入中枢：监听器只注册一次，各对局模式随时换绑/解绑处理函数 */
-export function makeInputHub(): { setHandlers(h: InputHandlers | null): void } {
+/** 输入中枢：监听器只注册一次，各对局模式随时换绑/解绑处理函数；键盘与触屏共用 */
+export interface InputHub {
+  setHandlers(h: InputHandlers | null): void;
+  getHandlers(): InputHandlers | null;
+}
+
+export function makeInputHub(): InputHub {
   let handlers: InputHandlers | null = null;
   attachInput({
     onDir: d => handlers?.onDir(d),
     onBomb: () => handlers?.onBomb(),
   });
-  return { setHandlers: h => (handlers = h) };
+  return {
+    setHandlers: h => (handlers = h),
+    getHandlers: () => handlers,
+  };
 }
