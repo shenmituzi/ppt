@@ -4,7 +4,7 @@ body {
   font-family: "Microsoft YaHei", system-ui, sans-serif;
   display: flex; justify-content: center; padding-top: 24px;
 }
-.screen.hidden { display: none; }
+.screen.hidden { display: none !important; }
 #screen-lobby { width: 320px; display: flex; flex-direction: column; gap: 12px; }
 #screen-lobby h1 { text-align: center; }
 #screen-lobby input, #screen-lobby button {

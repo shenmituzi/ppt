@@ -59,6 +59,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
 /** 单机练习 */
 function enterLocalGame(playerId = "me") {
   const sim = new GameSim((Math.random() * 2 ** 31) | 0, [playerId]);
+  (window as any).__sim = sim; // 调试句柄（联机入口接管后移除）
   hub.setHandlers({
     onDir: d => sim.setInput(playerId, d),
     onBomb: () => sim.placeBomb(playerId),
