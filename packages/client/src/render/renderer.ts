@@ -59,6 +59,14 @@ export class Renderer {
   }
 
   private drawTiles(grid: Uint8Array) {
+    // 第一遍：全部先铺草地（水晶等透明贴图的缝隙要透出地面）
+    for (let gy = 0; gy < GRID_H; gy++) {
+      for (let gx = 0; gx < GRID_W; gx++) {
+        const h = cellHash(gx, gy);
+        this.ctx.drawImage(PIX.grass[h % 3], gx * TILE, gy * TILE, TILE, TILE);
+      }
+    }
+    // 第二遍：墙与可炸方块
     for (let gy = 0; gy < GRID_H; gy++) {
       for (let gx = 0; gx < GRID_W; gx++) {
         const x = gx * TILE;
@@ -66,16 +74,12 @@ export class Renderer {
         const t = grid[gy * GRID_W + gx];
         if (t === Tile.HardWall) {
           this.ctx.drawImage(PIX.stone, x, y, TILE, TILE);
-        } else if (t === Tile.SoftWall) {
-          this.ctx.drawImage(PIX.crate, x, y, TILE, TILE);
-        } else {
-          const h = cellHash(gx, gy);
-          this.ctx.drawImage(PIX.grass[h % 3], x, y, TILE, TILE);
+        } else if (t >= Tile.SoftWall) {
+          this.ctx.drawImage(PIX.soft[t - Tile.SoftWall], x, y, TILE, TILE);
+        } else if (gy > 0 && grid[(gy - 1) * GRID_W + gx] !== Tile.Floor) {
           // 墙根投影：上格是墙时在地面顶部画阴影条
-          if (gy > 0 && grid[(gy - 1) * GRID_W + gx] !== Tile.Floor) {
-            this.ctx.fillStyle = "rgba(0,0,0,.16)";
-            this.ctx.fillRect(x, y, TILE, 5);
-          }
+          this.ctx.fillStyle = "rgba(0,0,0,.16)";
+          this.ctx.fillRect(x, y, TILE, 5);
         }
       }
     }

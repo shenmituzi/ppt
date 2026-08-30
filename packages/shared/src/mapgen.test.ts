@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GRID_W, GRID_H, Tile, SPAWNS } from "./constants";
+import { GRID_W, GRID_H, Tile, SPAWNS, isSoft } from "./constants";
 import { generateMap } from "./mapgen";
 
 const idx = (gx: number, gy: number) => gy * GRID_W + gx;
@@ -41,7 +41,7 @@ describe("generateMap", () => {
     for (const [gx, gy] of forced) expect(grid[idx(gx, gy)]).toBe(Tile.Floor);
   });
 
-  it("软墙密度在合理区间", () => {
+  it("软墙密度在合理区间（含石头/水晶/冰块等可炸方块）", () => {
     const { grid } = generateMap(123);
     let soft = 0, total = 0;
     for (let gy = 1; gy < GRID_H - 1; gy++)
@@ -49,9 +49,28 @@ describe("generateMap", () => {
         const t = grid[idx(gx, gy)];
         if (t === Tile.HardWall) continue;
         total++;
-        if (t === Tile.SoftWall) soft++;
+        if (isSoft(t)) soft++;
       }
     expect(soft / total).toBeGreaterThan(0.4);
     expect(soft / total).toBeLessThan(0.95);
+  });
+
+  it("天气群落：暴雪地图的可炸方块没有木箱（冰/水晶/石头）", () => {
+    const { grid } = generateMap(9, "snow");
+    for (let gy = 1; gy < GRID_H - 1; gy++)
+      for (let gx = 1; gx < GRID_W - 1; gx++) {
+        const t = grid[idx(gx, gy)];
+        if (!isSoft(t)) continue;
+        expect(t === Tile.Ice || t === Tile.Crystal || t === Tile.Rock).toBe(true);
+      }
+  });
+
+  it("同种子同天气结果一致，不同天气外观不同", () => {
+    expect([...generateMap(5, "rain").grid]).toEqual([...generateMap(5, "rain").grid]);
+    // 两张图至少存在一处可炸方块外观差异（统计意义上必然）
+    const a = generateMap(5, "rain").grid;
+    const b = generateMap(5, "snow").grid;
+    const diff = a.some((t, i) => isSoft(t) && isSoft(b[i]) && t !== b[i]);
+    expect(diff).toBe(true);
   });
 });

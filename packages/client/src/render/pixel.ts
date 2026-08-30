@@ -286,12 +286,65 @@ function item(type: ItemType): HTMLCanvasElement {
   });
 }
 
+// ---------- 石头 / 水晶 / 冰块（可炸方块新外观） ----------
+
+function rock(): HTMLCanvasElement {
+  return sprite(p => {
+    p.rect(0, 0, PX, PX, "#3a4148"); // 深色缝底
+    // 圆润的大石头
+    p.circle(7.5, 8, 6, "#8d949c");
+    p.circle(6, 6.5, 3.4, "#aab1b8"); // 受光面
+    p.circle(9, 10, 3.4, "#767d85"); // 底部暗面
+    p.px(5, 9, "#5d646c");
+    p.px(10, 6, "#5d646c");
+    p.px(9, 5, "#c3c9cf");
+  });
+}
+
+function crystal(): HTMLCanvasElement {
+  // 透明底：碎裂的水晶簇长在格子里，缝隙透出地面
+  return sprite(p => {
+    // 主晶柱
+    p.rect(6, 3, 3, 10, "#a86ff5");
+    p.rect(7, 3, 1, 10, "#c9a2ff");
+    p.px(6, 13, "#7c4fd0");
+    p.px(8, 13, "#7c4fd0");
+    // 侧晶柱
+    p.rect(3, 7, 2, 7, "#8d5be0");
+    p.px(3, 6, "#a86ff5");
+    p.rect(11, 5, 2, 9, "#8d5be0");
+    p.px(12, 4, "#a86ff5");
+    // 高光
+    p.px(7, 4, "#e6d5ff");
+    p.px(11, 6, "#e6d5ff");
+    p.px(3, 8, "#c9a2ff");
+    // 底部碎晶
+    p.px(5, 13, "#8d5be0");
+    p.px(10, 13, "#8d5be0");
+  });
+}
+
+function ice(): HTMLCanvasElement {
+  return sprite(p => {
+    p.rect(0, 0, PX, PX, "#39506b");
+    p.rect(1, 1, 14, 14, "#9fd4f0"); // 冰体
+    p.rect(2, 2, 12, 2, "#c9e9fb"); // 顶受光
+    // 冰面反光斜线
+    for (let i = 0; i < 6; i++) p.px(4 + i, 5 + i, "#d9f0fc");
+    for (let i = 0; i < 4; i++) p.px(9 + i, 4 + i, "#d9f0fc");
+    p.rect(2, 12, 12, 2, "#6da3c9"); // 底部暗面
+    p.px(5, 9, "#ffffff");
+    p.px(11, 8, "#ffffff");
+  });
+}
+
 // ---------- 汇总 ----------
 
 export const PIX = {
   grass: [grass(0), grass(1), grass(2)],
   stone: stone(),
   crate: crate(),
+  soft: [crate(), crystal(), rock(), ice()], // index = Tile - Tile.SoftWall
   player: [0, 1, 2, 3].map(i => [player(i, 0), player(i, 1), player(i, 2)]),
   bomb: [bomb(false), bomb(true)],
   flame: [flame(false), flame(true)], // [中心, 臂]

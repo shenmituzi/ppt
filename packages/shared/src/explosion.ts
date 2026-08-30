@@ -1,4 +1,4 @@
-import { GRID_W, GRID_H, Tile } from "./constants";
+import { GRID_W, GRID_H, Tile, isSoft } from "./constants";
 import { Vec } from "./types";
 
 const DIRS: Vec[] = [
@@ -8,7 +8,7 @@ const DIRS: Vec[] = [
   { gx: 1, gy: 0 },
 ];
 
-/** 十字火焰覆盖范围：硬墙截断（不含），软墙含入并截断该方向 */
+/** 十字火焰覆盖范围：硬墙截断（不含），可炸方块含入并截断该方向 */
 export function computeFlame(grid: Uint8Array, gx: number, gy: number, power: number): Vec[] {
   const cells: Vec[] = [{ gx, gy }];
   for (const d of DIRS) {
@@ -19,7 +19,7 @@ export function computeFlame(grid: Uint8Array, gx: number, gy: number, power: nu
       const t = grid[y * GRID_W + x];
       if (t === Tile.HardWall) break;
       cells.push({ gx: x, gy: y });
-      if (t === Tile.SoftWall) break;
+      if (isSoft(t)) break;
     }
   }
   return cells;

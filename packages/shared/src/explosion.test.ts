@@ -48,3 +48,13 @@ describe("computeFlame", () => {
     expect(cells).not.toContain("1,0");
   });
 });
+
+describe("水晶可炸性", () => {
+  it("水晶与软墙行为一致：含入火焰并截断", () => {
+    const g = emptyGrid();
+    g[idx(7, 5)] = Tile.Crystal;
+    const cells = computeFlame(g, 6, 5, 2).map(key);
+    expect(cells).toContain("7,5");
+    expect(cells).not.toContain("8,5");
+  });
+});

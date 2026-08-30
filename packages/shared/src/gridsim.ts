@@ -3,7 +3,7 @@ import {
   SUDDEN_DEATH_AT_MS, SUDDEN_DEATH_STEP_MS, SPEED_LEVELS, MAX_BOMBS, MAX_FLAMES, MAX_SPEED_LEVEL,
   WEATHER_ITEM_RATE, SNOW_SLOW_FACTOR, RAIN_FUSE_FACTOR,
   LIGHTNING_WARN_MS, LIGHTNING_INTERVAL_MIN, LIGHTNING_INTERVAL_MAX,
-  Tile, ItemType, type WeatherType,
+  Tile, ItemType, isSoft, type WeatherType,
 } from "./constants";
 import { Dir, DirInput, GameEvent, Vec, dirDx, dirDy } from "./types";
 import { generateMap, mulberry32 } from "./mapgen";
@@ -90,7 +90,7 @@ export class GameSim {
     rngOverride?: () => number,
     weather: WeatherType = "sunny",
   ) {
-    const map = generateMap(seed);
+    const map = generateMap(seed, weather);
     this.grid = map.grid;
     this.weather = weather;
     this.rng = rngOverride ?? mulberry32((seed ^ 0x9e3779b9) >>> 0);
@@ -238,7 +238,7 @@ export class GameSim {
   private applyCellHit(c: Vec, exploded: Set<number> | null, source: "exploded" | "lightningStrike"): void {
     const i = c.gy * GRID_W + c.gx;
     const existingItem = this.items.get(i); // 火焰烧毁的是爆炸前就存在的道具
-    if (this.grid[i] === Tile.SoftWall) {
+    if (isSoft(this.grid[i])) {
       this.grid[i] = Tile.Floor;
       const item = this.rollDrop();
       if (item !== null) {

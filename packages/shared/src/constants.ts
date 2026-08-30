@@ -33,7 +33,16 @@ export const MAX_SPEED_LEVEL = 6;
 export enum Tile {
   Floor = 0,
   HardWall = 1,
+  /** 可炸方块按外观细分：木箱 / 水晶 / 石头 / 冰块，行为一致（一炸就开） */
   SoftWall = 2,
+  Crystal = 3,
+  Rock = 4,
+  Ice = 5,
+}
+
+/** 是否为可被泡泡炸毁的方块 */
+export function isSoft(t: number): boolean {
+  return t >= Tile.SoftWall;
 }
 
 export enum ItemType {

@@ -1,4 +1,4 @@
-import { GRID_W, GRID_H, Tile, SOFT_WALL_RATIO, SPAWNS } from "./constants";
+import { GRID_W, GRID_H, Tile, SOFT_WALL_RATIO, SPAWNS, type WeatherType } from "./constants";
 import { Vec } from "./types";
 
 export interface GameMap {
@@ -18,12 +18,28 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
+/** 各天气的可炸方块外观分布：[木箱, 石头, 水晶, 冰块] 权重 */
+const BIOME: Record<WeatherType, [number, number, number, number]> = {
+  sunny: [0.6, 0.4, 0, 0], // 木箱 + 石头
+  rain: [0.25, 0.75, 0, 0], // 以石头为主
+  snow: [0, 0.2, 0.3, 0.5], // 冰块 + 水晶
+  fog: [0, 0.35, 0.65, 0], // 暗水晶为主
+};
+
+function pickDestructible(weather: WeatherType, rng: () => number): Tile {
+  const [w, r, c, i] = BIOME[weather];
+  const roll = rng();
+  if (roll < w) return Tile.SoftWall;
+  if (roll < w + r) return Tile.Rock;
+  if (roll < w + r + c) return Tile.Crystal;
+  return Tile.Ice;
+}
+
 /**
- * 生成 13×11 地图：外圈硬墙 + 棋盘格硬墙 + 约 70% 软墙。
- * 四角出生点 3×3 安全区无软墙，且朝地图中心方向各让出一格通路，
- * 保证不放泡泡也能走出安全区。
+ * 生成 15×13 地图：外圈硬墙 + 棋盘格石柱 + 成簇分布的可炸方块（按天气着外观）。
+ * 四角出生点 3×3 安全区无障碍，且朝地图中心方向各让出一格通路。
  */
-export function generateMap(seed: number): GameMap {
+export function generateMap(seed: number, weather: WeatherType = "sunny"): GameMap {
   const rng = mulberry32(seed);
   const grid = new Uint8Array(GRID_W * GRID_H).fill(Tile.Floor);
   const idx = (gx: number, gy: number) => gy * GRID_W + gx;
@@ -47,12 +63,43 @@ export function generateMap(seed: number): GameMap {
     forcedOpen.add(idx(s.gx, s.gy + Math.sign(cy - s.gy) * 2));
   }
 
+  // 1) 随机撒软墙（布尔掩码）
+  const soft: boolean[][] = Array.from({ length: GRID_H }, () => Array(GRID_W).fill(false));
   for (let gy = 1; gy < GRID_H - 1; gy++) {
     for (let gx = 1; gx < GRID_W - 1; gx++) {
       const i = idx(gx, gy);
       if (grid[i] !== Tile.Floor) continue;
       if (inSafeZone(gx, gy) || forcedOpen.has(i)) continue;
-      if (rng() < SOFT_WALL_RATIO) grid[i] = Tile.SoftWall;
+      soft[gy][gx] = rng() < SOFT_WALL_RATIO;
+    }
+  }
+
+  // 2) 两次元胞平滑：让方块成簇、地形自然（而不是均匀散布的方格感）
+  for (let pass = 0; pass < 2; pass++) {
+    const next = soft.map(r => [...r]);
+    for (let gy = 1; gy < GRID_H - 1; gy++) {
+      for (let gx = 1; gx < GRID_W - 1; gx++) {
+        const i = idx(gx, gy);
+        if (grid[i] !== Tile.Floor) continue;
+        if (inSafeZone(gx, gy) || forcedOpen.has(i)) continue;
+        let n = 0;
+        if (soft[gy - 1][gx]) n++;
+        if (soft[gy + 1][gx]) n++;
+        if (soft[gy][gx - 1]) n++;
+        if (soft[gy][gx + 1]) n++;
+        next[gy][gx] = n >= 3 ? true : n === 0 ? false : soft[gy][gx];
+      }
+    }
+    for (let gy = 0; gy < GRID_H; gy++) soft[gy] = [...next[gy]];
+  }
+
+  // 3) 按天气外观落方块
+  for (let gy = 1; gy < GRID_H - 1; gy++) {
+    for (let gx = 1; gx < GRID_W - 1; gx++) {
+      const i = idx(gx, gy);
+      if (grid[i] !== Tile.Floor) continue;
+      if (inSafeZone(gx, gy) || forcedOpen.has(i)) continue;
+      if (soft[gy][gx]) grid[i] = pickDestructible(weather, rng);
     }
   }
 
