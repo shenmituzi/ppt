@@ -103,7 +103,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
         const name = p.id === myId ? "你" : (p.name || p.id);
         return `<span class="pp${dead}" style="--dot:${dot}">
           <i class="dot"></i>${name}
-          <em>泡${p.bombsMax ?? 1}</em><em>火${p.flameLen ?? 1}</em><em>速${p.speedLevel ?? 1}</em>
+          <em>❤${p.lives ?? 3}</em><em>泡${p.bombsMax ?? 1}</em><em>火${p.flameLen ?? 1}</em><em>速${p.speedLevel ?? 1}</em>
         </span>`;
       }).join("");
     }
