@@ -153,16 +153,17 @@ body {
 
 /* ---------- 触屏操作层 ---------- */
 #touch-layer {
-  position: fixed; inset: 0; pointer-events: none; z-index: 50;
+  display: none; position: fixed; inset: 0; pointer-events: none; z-index: 50;
 }
-#move-surface { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
+body.game-active #touch-layer { display: block; }
+#move-surface { position: absolute; inset: 58px 0 0; pointer-events: auto; touch-action: none; }
 #bomb-btn {
   position: absolute; right: 22px; bottom: 30px;
   width: 84px; height: 84px; border-radius: 50%;
   font-size: 40px; line-height: 80px; text-align: center;
   background: rgba(255, 170, 150, .75);
   border: 2.5px solid rgba(255, 255, 255, .8);
-  touch-action: none; pointer-events: auto;
+  touch-action: none; pointer-events: auto; z-index: 2;
   -webkit-touch-callout: none;
 }
 #bomb-btn:active { background: rgba(255, 140, 115, .9); }
@@ -172,7 +173,7 @@ body {
   font-size: 30px; line-height: 62px; text-align: center;
   background: rgba(126, 92, 255, .55);
   border: 2px solid rgba(255, 255, 255, .7);
-  touch-action: none; pointer-events: auto;
+  touch-action: none; pointer-events: auto; z-index: 2;
   -webkit-touch-callout: none;
 }
 #atk-btn:active { background: rgba(126, 92, 255, .85); }

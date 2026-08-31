@@ -23,6 +23,7 @@ import { initShop, shopToast } from "./shop";
 function showScreen(id: string) {
   for (const el of document.querySelectorAll(".screen")) el.classList.add("hidden");
   document.getElementById(id)!.classList.remove("hidden");
+  document.body.classList.toggle("game-active", id === "screen-game");
 }
 
 const hub = makeInputHub();
@@ -182,6 +183,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
 
     // 结算
     if (f.phase === "ended" && overlay.classList.contains("hidden")) {
+      document.body.classList.remove("game-active");
       const win = f.winnerIds.includes(myId);
       const adventureWin = f.gameType === "adventure" && f.winnerIds.length > 0;
       if (win || adventureWin) sfx.play("win");
