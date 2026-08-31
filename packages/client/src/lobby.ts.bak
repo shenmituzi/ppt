@@ -22,8 +22,7 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
     let entered = false;
     const check = () => {
       // 状态补丁在对局中会持续到达，onEnter 绝不能重复执行
-      // 必须等 grid 非空才进入游戏画面（防止 Schema 分批同步导致 phase 先到但 grid 仍为空）
-      if (entered || room.state.phase === "waiting" || !room.state.grid) return;
+      if (entered || room.state.phase === "waiting") return;
       entered = true;
       room.onStateChange.remove(check);
       onEnter(room);
@@ -93,33 +92,8 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
   document.getElementById("btn-quick4")!.onclick = () => startQuick(4);
   document.getElementById("btn-adventure")!.onclick = () =>
     guard(async () => {
-      say("冒险匹配中…（凑不齐 5 人会由人机补位，6 秒后自动开局）");
-      const room = await adventureMatch();
-      watchAndEnter(room);
-      // 冒险模式：显示等待提示，6 秒后自动开局（人机补位）
-      const card = document.getElementById("lobby-card")!;
-      card.querySelectorAll("button, input, p, .divider").forEach(el => {
-        if (el.id !== "lobby-status") (el as HTMLElement).style.display = "none";
-      });
-      const info = document.createElement("p");
-      info.textContent = "🎮 冒险模式准备中…6 秒后自动开局（空位由机器人补位）";
-      card.appendChild(info);
-      let countdown = 6;
-      const timer = setInterval(() => {
-        countdown--;
-        if (countdown <= 0 || room.state.phase !== "waiting") {
-          clearInterval(timer);
-          if (room.state.phase !== "waiting") info.textContent = "⚔️ 对局开始！";
-        } else {
-          info.textContent = `🎮 冒险模式准备中…${countdown} 秒后自动开局`;
-        }
-      }, 1000);
-      room.onStateChange(() => {
-        if (room.state.phase !== "waiting") {
-          clearInterval(timer);
-          info.textContent = "⚔️ 对局开始！";
-        }
-      });
+      say("冒险匹配中…（凑不齐 5 人会由人机补位）");
+      watchAndEnter(await adventureMatch());
     });
   document.getElementById("btn-create")!.onclick = () =>
     guard(async () => {
