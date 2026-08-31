@@ -11,6 +11,8 @@ export class BotBrain {
   private nextDecideAt = 0;
   private fleeUntil = 0;
   private fleeDir: DirInput = "none";
+  private recentCells: string[] = [];
+  private lastDir: DirInput = "none";
 
   constructor(
     private sim: GameSim,
@@ -22,6 +24,9 @@ export class BotBrain {
     if (!me || !me.alive) return;
     const gx = Math.round(me.x);
     const gy = Math.round(me.y);
+    const cell = `${gx},${gy}`;
+    this.recentCells.push(cell);
+    if (this.recentCells.length > 8) this.recentCells.shift();
 
     // 先处理爆炸预警：人机会读取泡泡的引信和火力，优先走向不在爆炸线上的格子。
     const danger = this.dangerCells();
@@ -125,7 +130,11 @@ export class BotBrain {
       const d = dirs[(offset + i) % 4];
       const nx = gx + (d === "left" ? -1 : d === "right" ? 1 : 0);
       const ny = gy + (d === "up" ? -1 : d === "down" ? 1 : 0);
-      if (d && this.sim.isCellFree(nx, ny) && !this.dangerCells().has(`${nx},${ny}`)) return d;
+      if (d && this.sim.isCellFree(nx, ny) && !this.dangerCells().has(`${nx},${ny}`) &&
+        !(this.recentCells.slice(-4).filter(c => c === `${nx},${ny}`).length >= 2 && d === this.lastDir)) {
+        this.lastDir = d;
+        return d;
+      }
     }
     return "none";
   }

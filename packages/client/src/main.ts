@@ -134,6 +134,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
 
     // HUD（三枚信息胶囊：天气 / 存活 / 阶段信息）
     hudWx.textContent = WEATHER_LABEL[f.weather as WeatherType] ?? "☀️ 晴朗";
+    hudWx.className = `pill weather-${f.weather}`;
     hudAlive.textContent = `存活 ${f.players.filter(p => p.alive).length}`;
     if (f.sun !== lastSunShown) {
       lastSunShown = f.sun;

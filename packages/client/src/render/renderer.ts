@@ -77,6 +77,7 @@ export interface GhostView { x: number; y: number; colorIndex: number; diedAtMs:
 export type { ViewerView };
 
 const center = (v: number) => (v + 0.5) * TILE;
+const VISUAL_SCALE = 2.5;
 
 /** 与帧无关的格子伪随机数（纹理装饰用，保证不闪烁） */
 function cellHash(gx: number, gy: number): number {
@@ -244,7 +245,8 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(center(it.gx), center(it.gy) + 9, 8, 3, 0, 0, Math.PI * 2);
     ctx.fill();
-    drawItemTile(ctx, center(it.gx), center(it.gy), it.type, nowMs);
+    ctx.save(); ctx.translate(center(it.gx), center(it.gy)); ctx.scale(VISUAL_SCALE, VISUAL_SCALE);
+    drawItemTile(ctx, 0, 0, it.type, nowMs); ctx.restore();
   }
 
   private drawBomb(gx: number, gy: number, fuse: number, nowMs: number) {
@@ -254,14 +256,16 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(center(gx), center(gy) + 9, 9, 3.2, 0, 0, Math.PI * 2);
     ctx.fill();
-    drawBombBody(ctx, center(gx), center(gy), urgency, nowMs);
+    ctx.save(); ctx.translate(center(gx), center(gy)); ctx.scale(VISUAL_SCALE, VISUAL_SCALE);
+    drawBombBody(ctx, 0, 0, urgency, nowMs); ctx.restore();
   }
 
   private drawFlame(fl: FrameData["flames"][number], nowMs: number) {
     const { ctx } = this;
     const alpha = Math.max(0, Math.min(1, fl.life / FLAME_MS));
     fl.cells.forEach((c, i) => {
-      drawFlameCell(ctx, center(c.gx), center(c.gy), i === 0, alpha, nowMs, i * 3);
+      ctx.save(); ctx.translate(center(c.gx), center(c.gy)); ctx.scale(2.1, 2.1);
+      drawFlameCell(ctx, 0, 0, i === 0, alpha, nowMs, i * 3); ctx.restore();
     });
   }
 
@@ -273,7 +277,7 @@ export class Renderer {
     const cy = center(p.y);
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.scale(1.45, 1.45);
+    ctx.scale(VISUAL_SCALE, VISUAL_SCALE);
     drawPlayerBody(ctx, 0, 0, p.colorIndex % 4, p.moving, nowMs);
     ctx.restore();
     // 无敌护盾
@@ -435,7 +439,7 @@ export class Renderer {
     const cy = center(m.y);
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.scale(1.45, 1.45);
+    ctx.scale(VISUAL_SCALE, VISUAL_SCALE);
     drawMonsterBody(ctx, 0, 0, nowMs);
     ctx.restore();
     // 血条
@@ -486,11 +490,22 @@ export class Renderer {
     const { ctx } = this;
     const W = GRID_W * TILE;
     const H = GRID_H * TILE;
-    if (f.weather === "rain") {
-      ctx.strokeStyle = "rgba(150,180,230,.35)";
+    if (f.weather === "sunny") {
+      ctx.fillStyle = "rgba(255,218,120,.08)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "rgba(255,244,180,.22)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i++) {
+        const x = 40 + i * 155;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x - 90, H); ctx.stroke();
+      }
+    } else if (f.weather === "rain") {
+      ctx.fillStyle = "rgba(56,82,132,.22)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "rgba(130,178,235,.62)";
       ctx.lineWidth = 1.3;
       ctx.lineCap = "round";
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 115; i++) {
         const s = cellHash(i, 7);
         const speed = 0.9 + (s % 5) * 0.12;
         const x = ((s % W) + nowMs * 0.18 * speed) % W;
@@ -500,12 +515,12 @@ export class Renderer {
         ctx.lineTo(x - 1.5, y + 11);
         ctx.stroke();
       }
-      ctx.fillStyle = "rgba(110,140,200,.10)";
+      ctx.fillStyle = "rgba(40,70,125,.12)";
       ctx.fillRect(0, 0, W, H);
     } else if (f.weather === "snow") {
       const layers: [number, number, number, number][] = [
-        [42, 0.05, 2.4, 0.9],
-        [30, 0.09, 1.5, 0.6],
+        [72, 0.05, 3.2, 0.95],
+        [48, 0.09, 2.1, 0.78],
       ];
       for (const [count, speed, size, alpha] of layers) {
         ctx.fillStyle = `rgba(255,255,255,${alpha})`;
@@ -518,16 +533,18 @@ export class Renderer {
           ctx.fill();
         }
       }
-      ctx.fillStyle = "rgba(200,225,250,.07)";
+      ctx.fillStyle = "rgba(170,210,245,.24)";
       ctx.fillRect(0, 0, W, H);
     } else if (f.weather === "fog") {
-      ctx.fillStyle = "rgba(240,240,232,.16)";
-      for (let i = 0; i < 6; i++) {
+      ctx.fillStyle = "rgba(232,236,231,.48)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "rgba(245,246,239,.24)";
+      for (let i = 0; i < 10; i++) {
         const s = cellHash(i, 42);
         const x = (((s % (W + 300)) + nowMs * (0.014 + (i % 3) * 0.006)) % (W + 300)) - 150;
         const y = (s * 11) % H;
         ctx.beginPath();
-        ctx.ellipse(x, y, 130 + (s % 60), 46 + (i % 3) * 12, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, y, 170 + (s % 80), 58 + (i % 3) * 16, 0, 0, Math.PI * 2);
         ctx.fill();
       }
       if (viewer) {
@@ -538,7 +555,7 @@ export class Renderer {
           center(viewer.x), center(viewer.y), r,
         );
         g.addColorStop(0, "rgba(245,242,232,0)");
-        g.addColorStop(1, "rgba(243,240,228,.9)");
+        g.addColorStop(1, "rgba(226,230,224,.96)");
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, W, H);
       }

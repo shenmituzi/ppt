@@ -5,7 +5,7 @@ describe("常量", () => {
   it("关键数值与设计文档一致", () => {
     expect(GRID_W).toBe(17);
     expect(GRID_H).toBe(15);
-    expect(TILE).toBe(48);
+    expect(TILE).toBe(64);
     expect(BOMB_FUSE_MS).toBe(2500);
     expect(SPEED_LEVELS[0]).toBe(4);
     expect(Tile.HardWall).toBe(1);

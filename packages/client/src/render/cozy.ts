@@ -12,6 +12,7 @@ function makeTile(draw: (ctx: CanvasRenderingContext2D) => void): HTMLCanvasElem
   cv.width = TILE;
   cv.height = TILE;
   const ctx = cv.getContext("2d")!;
+  ctx.scale(TILE / 32, TILE / 32);
   draw(ctx);
   return cv;
 }

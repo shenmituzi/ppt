@@ -4,7 +4,7 @@ export const GRID_H = 15;
 export const CELL_COUNT = GRID_W * GRID_H;
 
 /** 客户端每格像素 */
-export const TILE = 48;
+export const TILE = 64;
 
 /** 泡泡引信 */
 export const BOMB_FUSE_MS = 2500;
