@@ -4,7 +4,7 @@ import type { Dir, InputHub } from "./input";
  * 触屏操作：屏幕任意位置按住并滑动控制方向，右下角按钮负责动作。
  */
 
-const DEAD_ZONE = 9; // 死区（px），小于此距离视为不动
+const DEAD_ZONE = 12;
 
 const shouldShow = () =>
   new URLSearchParams(location.search).has("touch") ||
@@ -35,9 +35,11 @@ export function createTouchControls(hub: InputHub): void {
   const bombBtn = document.getElementById("bomb-btn")!;
   const atkBtn = document.getElementById("atk-btn")!;
 
-  let moveId: number | null = null;
-  let startX = 0;
-  let startY = 0;
+  const pointers = new Map<number, { x: number; y: number }>();
+  let anchorX = 0;
+  let anchorY = 0;
+  let panX = 0;
+  let panY = 0;
   let currentDir: Dir | "none" = "none";
 
   const sendDir = (d: Dir | "none") => {
@@ -47,20 +49,43 @@ export function createTouchControls(hub: InputHub): void {
   };
 
   surface.addEventListener("pointerdown", e => {
-    if (moveId !== null) return;
-    moveId = e.pointerId; startX = e.clientX; startY = e.clientY;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     surface.setPointerCapture(e.pointerId);
-    sendDir("none");
+    if (pointers.size === 1) {
+      anchorX = e.clientX; anchorY = e.clientY;
+    } else if (pointers.size === 2) {
+      sendDir("none");
+      panX = [...pointers.values()].reduce((n, p) => n + p.x, 0) / 2;
+      panY = [...pointers.values()].reduce((n, p) => n + p.y, 0) / 2;
+    }
     e.preventDefault();
   });
   surface.addEventListener("pointermove", e => {
-    if (e.pointerId !== moveId) return;
-    sendDir(dirFromOffset(e.clientX - startX, e.clientY - startY));
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size >= 2) {
+      const pts = [...pointers.values()];
+      const cx = (pts[0].x + pts[1].x) / 2;
+      const cy = (pts[0].y + pts[1].y) / 2;
+      window.dispatchEvent(new CustomEvent("camera-pan", { detail: { dx: cx - panX, dy: cy - panY } }));
+      panX = cx; panY = cy;
+      sendDir("none");
+      return;
+    }
+    const d = dirFromOffset(e.clientX - anchorX, e.clientY - anchorY);
+    if (d !== "none") {
+      sendDir(d);
+      // 连续转向以最近一次有效滑动为基准，不必跨回最初触点。
+      anchorX = e.clientX; anchorY = e.clientY;
+    }
   });
   const release = (e: PointerEvent) => {
-    if (e.pointerId !== moveId) return;
-    moveId = null;
-    sendDir("none");
+    if (!pointers.delete(e.pointerId)) return;
+    if (pointers.size === 0) sendDir("none");
+    else {
+      const p = [...pointers.values()][0];
+      anchorX = p.x; anchorY = p.y;
+    }
   };
   surface.addEventListener("pointerup", release);
   surface.addEventListener("pointercancel", release);

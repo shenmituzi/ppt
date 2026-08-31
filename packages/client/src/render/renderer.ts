@@ -94,6 +94,7 @@ export class Renderer {
   private dragX = 0;
   private dragY = 0;
   private dragging = false;
+  private manualCameraUntil = 0;
   /** 晴天彩蛋：偶尔飞过的鸟群 */
   private flocks: { start: number; y: number; dir: 1 | -1; count: number; speed: number }[] = [];
   private nextFlockAt = 4000;
@@ -111,9 +112,17 @@ export class Renderer {
       if (!this.dragging) return;
       this.cameraX -= e.clientX - this.dragX; this.cameraY -= e.clientY - this.dragY;
       this.dragX = e.clientX; this.dragY = e.clientY; this.clampCamera(canvas);
+      this.manualCameraUntil = performance.now() + 2200;
     });
-    const release = () => { this.dragging = false; };
+    const release = () => { this.dragging = false; this.manualCameraUntil = performance.now() + 2200; };
     canvas.addEventListener("pointerup", release); canvas.addEventListener("pointercancel", release);
+    window.addEventListener("camera-pan", ((event: CustomEvent<{ dx: number; dy: number }>) => {
+      this.cameraX -= event.detail.dx;
+      this.cameraY -= event.detail.dy;
+      this.manualCameraUntil = performance.now() + 2200;
+      this.clampCamera(canvas);
+    }) as EventListener);
+    window.addEventListener("camera-follow", () => { this.manualCameraUntil = 0; });
   }
 
   draw(f: FrameData, nowMs: number, ghosts: GhostView[] = [], viewer: ViewerView | null = null) {
@@ -184,9 +193,9 @@ export class Renderer {
   }
 
   private updateCamera(canvas: HTMLCanvasElement, viewer: ViewerView | null) {
-    if (!this.dragging && viewer) {
-      this.cameraX += (center(viewer.x) - canvas.width / 2 - this.cameraX) * 0.12;
-      this.cameraY += (center(viewer.y) - canvas.height / 2 - this.cameraY) * 0.12;
+    if (!this.dragging && viewer && performance.now() >= this.manualCameraUntil) {
+      this.cameraX += (center(viewer.x) - canvas.width / 2 - this.cameraX) * 0.075;
+      this.cameraY += (center(viewer.y) - canvas.height / 2 - this.cameraY) * 0.075;
     }
     this.clampCamera(canvas);
   }

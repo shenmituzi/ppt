@@ -254,3 +254,4 @@ body.game-active #touch-layer { display: block; }
   cursor: pointer; color: #fff; background: linear-gradient(180deg, #8ecf7d, #63b35c);
   border: none; font-family: inherit; font-size: 12.5px;
 }
+.pill.map-focus { cursor: pointer; font-size: 20px; line-height: 1; min-width: 38px; padding-inline: 10px; }

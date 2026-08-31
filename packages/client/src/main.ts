@@ -58,6 +58,11 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   const hudBgm = document.createElement("button");
   hudBgm.className = "pill shop";
   hudBgm.textContent = "🔊";
+  const hudFocus = document.createElement("button");
+  hudFocus.className = "pill map-focus";
+  hudFocus.textContent = "⌖";
+  hudFocus.title = "定位到自己";
+  hudFocus.onclick = () => window.dispatchEvent(new Event("camera-follow"));
   let shopOpen = false;
   hudShop.onclick = () => {
     shopOpen = !shopOpen;
@@ -69,7 +74,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     hudBgm.textContent = bgmOn ? "🔊" : "🔇";
     if (bgmOn) bgm.start(); else bgm.stop();
   };
-  hud.replaceChildren(hudWx, hudAlive, hudTime, hudEnemy, hudSun, hudShop, hudBgm);
+  hud.replaceChildren(hudWx, hudAlive, hudTime, hudEnemy, hudSun, hudShop, hudFocus, hudBgm);
   window.addEventListener("keydown", e => {
     if (e.code === "KeyB" && !(e.target instanceof HTMLInputElement)) {
       hudShop.click();
