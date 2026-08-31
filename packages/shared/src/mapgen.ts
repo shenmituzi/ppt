@@ -53,7 +53,7 @@ export function generateMap(seed: number, weather: WeatherType = "sunny"): GameM
   }
 
   const inSafeZone = (gx: number, gy: number) =>
-    SPAWNS.some(s => Math.abs(gx - s.gx) <= 1 && Math.abs(gy - s.gy) <= 1);
+    SPAWNS.some(s => Math.abs(gx - s.gx) <= 2 && Math.abs(gy - s.gy) <= 2);
 
   const cx = (GRID_W - 1) / 2;
   const cy = (GRID_H - 1) / 2;

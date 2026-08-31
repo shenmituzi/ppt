@@ -23,6 +23,16 @@ export class BotBrain {
     const gx = Math.round(me.x);
     const gy = Math.round(me.y);
 
+    // 先处理爆炸预警：人机会读取泡泡的引信和火力，优先走向不在爆炸线上的格子。
+    const danger = this.dangerCells();
+    if (danger.has(`${gx},${gy}`)) {
+      const escape = this.safeEscape(gx, gy, danger);
+      if (escape !== "none") {
+        this.sim.setInput(this.id, escape);
+        return;
+      }
+    }
+
     // 逃离刚放的泡泡
     if (now < this.fleeUntil) {
       this.sim.setInput(this.id, this.fleeDir);
@@ -113,7 +123,35 @@ export class BotBrain {
     const offset = Math.floor(now / 450) % 4;
     for (let i = 0; i < 4; i++) {
       const d = dirs[(offset + i) % 4];
-      if (d && this.sim.isCellFree(gx + (d === "left" ? -1 : d === "right" ? 1 : 0), gy + (d === "up" ? -1 : d === "down" ? 1 : 0))) return d;
+      const nx = gx + (d === "left" ? -1 : d === "right" ? 1 : 0);
+      const ny = gy + (d === "up" ? -1 : d === "down" ? 1 : 0);
+      if (d && this.sim.isCellFree(nx, ny) && !this.dangerCells().has(`${nx},${ny}`)) return d;
+    }
+    return "none";
+  }
+
+  private dangerCells(): Set<string> {
+    const danger = new Set<string>();
+    for (const b of this.sim.bombs) {
+      if (b.explodeAt - this.sim.elapsedMs > 3200) continue;
+      danger.add(`${b.gx},${b.gy}`);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (let r = 1; r <= b.power; r++) {
+          const x = b.gx + dx * r, y = b.gy + dy * r;
+          if (!this.sim.isCellFree(x, y)) break;
+          danger.add(`${x},${y}`);
+        }
+      }
+    }
+    return danger;
+  }
+
+  private safeEscape(gx: number, gy: number, danger: Set<string>): DirInput {
+    const dirs: DirInput[] = ["up", "down", "left", "right"];
+    for (const d of dirs) {
+      const nx = gx + (d === "left" ? -1 : d === "right" ? 1 : 0);
+      const ny = gy + (d === "up" ? -1 : d === "down" ? 1 : 0);
+      if (this.sim.isCellFree(nx, ny) && !danger.has(`${nx},${ny}`)) return d;
     }
     return "none";
   }

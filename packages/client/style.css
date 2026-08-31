@@ -105,6 +105,7 @@ body {
   font-weight: 700; color: #5f7c4e;
 }
 #hud .pill.warn { color: #7a5416; background: rgba(255, 236, 190, .9); }
+#hud .pill.enemy { color: #784a9e; background: rgba(239, 226, 255, .92); }
 #hud .pill.danger {
   color: #e05a5a; background: rgba(255, 220, 220, .92); border-color: rgba(255, 150, 150, .7);
   animation: blink-danger 1s infinite;
@@ -113,7 +114,8 @@ body {
 
 #canvas-wrap { position: relative; }
 #game {
-  display: block; border-radius: 16px;
+  display: block; width: min(1100px, calc(100vw - 24px)); height: min(760px, calc(100vh - 150px)); border-radius: 16px;
+  object-fit: contain; background: #9bd47a;
   box-shadow: 0 20px 50px rgba(110, 140, 100, .45), 0 0 0 3px rgba(255, 255, 255, .75);
 }
 #overlay {
@@ -207,7 +209,7 @@ body {
 @media (max-width: 460px) {
   body { padding-top: 8px; align-items: flex-start; }
   #screen-lobby { width: min(92vw, 336px); margin-top: 5vh; }
-  #game { width: calc(100vw - 8px); height: auto; }
+  #game { width: calc(100vw - 8px); height: calc(100vh - 125px); min-height: 360px; }
   #hud { font-size: 13px; min-height: 26px; }
   #hint { display: none; }
 }

@@ -201,9 +201,10 @@ export class GameSim {
     this.weather = weather;
     this.rng = rngOverride ?? mulberry32((seed ^ 0x9e3779b9) >>> 0);
     playerIds.forEach((id, i) => {
-      const s = map.spawns[i % 4];
+      const spawnIndex = this.gameType === "adventure" && i < 2 ? 0 : i % 4;
+      const s = map.spawns[spawnIndex];
       this.players.set(id, {
-        id, spawnIndex: i % 4, x: s.gx, y: s.gy,
+        id, spawnIndex, x: s.gx, y: s.gy,
         fromX: s.gx, fromY: s.gy, progress: 0, dir: null, input: "none",
         bombsMax: 1, bombsActive: 0, flameLen: 1, speedLevel: 1,
         alive: true, invincibleUntil: SPAWN_INVINCIBLE_MS,
@@ -291,6 +292,9 @@ export class GameSim {
     else if (itemId === "flame") p.flameLen = Math.min(MAX_FLAMES, p.flameLen + 1);
     else if (itemId === "speed") p.speedLevel = Math.min(MAX_SPEED_LEVEL, p.speedLevel + 1);
     else if (itemId === "mushroom") p.mushroomLv += 1;
+    else if (itemId === "wall") {
+      if (!this.placeWall(p)) { p.sun += entry.price; return { ok: false, message: "领地边缘没有可建位置" }; }
+    }
     else if (itemId === "cannon" || itemId === "fan" || itemId === "fridge") {
       this.placeDevice(itemId, p);
     } else if (itemId === "blindbox") {
@@ -298,6 +302,23 @@ export class GameSim {
       return { ok: true, message };
     }
     return { ok: true, message: `已购买 ${entry.name}` };
+  }
+
+  /** 城墙只允许落在己方出生区外沿，避免把整张地图封死。 */
+  private placeWall(p: SimPlayer): boolean {
+    const sx = SPAWNS[p.spawnIndex % 4].gx;
+    const sy = SPAWNS[p.spawnIndex % 4].gy;
+    const candidates = [
+      { gx: sx + 3, gy: sy }, { gx: sx, gy: sy + 3 },
+      { gx: sx + 2, gy: sy + 2 }, { gx: sx + 2, gy: sy - 2 },
+      { gx: sx - 2, gy: sy + 2 }, { gx: sx - 2, gy: sy - 2 },
+    ];
+    const spot = candidates.find(c => c.gx > 0 && c.gx < GRID_W - 1 && c.gy > 0 && c.gy < GRID_H - 1 &&
+      this.grid[c.gy * GRID_W + c.gx] === Tile.Floor && !this.houseBlock.has(c.gy * GRID_W + c.gx) &&
+      !this.devices.some(d => d.gx === c.gx && d.gy === c.gy));
+    if (!spot) return false;
+    this.grid[spot.gy * GRID_W + spot.gx] = Tile.HardWall;
+    return true;
   }
 
   /** 盲盒：随机开出道具 / 装置 / 阳光 / 谢谢惠顾 */

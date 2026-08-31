@@ -4,7 +4,7 @@ export const GRID_H = 15;
 export const CELL_COUNT = GRID_W * GRID_H;
 
 /** 客户端每格像素 */
-export const TILE = 32;
+export const TILE = 48;
 
 /** 泡泡引信 */
 export const BOMB_FUSE_MS = 2500;
@@ -191,6 +191,7 @@ export const SHOP: ShopEntry[] = [
   { id: "cannon", name: "加农炮", icon: "🎯", price: 30, desc: "放置炮台：3 格内自动攻击，每发 10 伤害" },
   { id: "fan", name: "小风扇", icon: "🌀", price: 20, desc: "放置后 4 格内怪物减速 40%" },
   { id: "fridge", name: "冰箱", icon: "🧊", price: 25, desc: "放置后 4 格内怪物再减速 35%（配合风扇/加农炮）" },
+  { id: "wall", name: "城墙", icon: "🧱", price: 12, desc: "在领地边缘建造一段城墙，阻挡怪物" },
   { id: "mushroom", name: "双子蘑菇", icon: "🍄", price: 20, desc: "阳光产出 +1/次" },
   { id: "blindbox", name: "盲盒", icon: "🎁", price: 15, desc: "随机开出道具、装置、阳光……也可能谢谢惠顾" },
 ];

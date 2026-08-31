@@ -15,6 +15,7 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
   state.serverElapsedMs = Math.floor(sim.elapsedMs);
   state.phase = sim.phase;
   state.gameType = sim.gameType;
+  state.grid = gridToString(sim.grid);
 
   for (const [id, p] of sim.players) {
     let ps = state.players.get(id);

@@ -45,6 +45,8 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   hudAlive.className = "pill";
   const hudTime = document.createElement("span");
   hudTime.className = "pill warn";
+  const hudEnemy = document.createElement("span");
+  hudEnemy.className = "pill enemy hidden";
   const hudWx = document.createElement("span");
   hudWx.className = "pill";
   const hudSun = document.createElement("span");
@@ -66,7 +68,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     hudBgm.textContent = bgmOn ? "🔊" : "🔇";
     if (bgmOn) bgm.start(); else bgm.stop();
   };
-  hud.replaceChildren(hudWx, hudAlive, hudTime, hudSun, hudShop, hudBgm);
+  hud.replaceChildren(hudWx, hudAlive, hudTime, hudEnemy, hudSun, hudShop, hudBgm);
   window.addEventListener("keydown", e => {
     if (e.code === "KeyB" && !(e.target instanceof HTMLInputElement)) {
       hudShop.click();
@@ -154,6 +156,12 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
       hudTime.textContent = `⏱ 突然死亡 ${Math.ceil((f.suddenDeathAt - f.elapsedMs) / 1000)}s`;
       hudTime.classList.remove("danger");
     }
+    if (f.gameType === "adventure") {
+      const maxLevel = f.monsters.reduce((n, m) => Math.max(n, m.level), 0);
+      const damaged = f.houses.filter(h => !h.destroyed && h.hp < h.maxHp).length;
+      hudEnemy.textContent = `👾 怪物 ${f.monsters.length} · Lv.${maxLevel || 0}${damaged ? ` · ⚠ ${damaged}座基地受损` : ""}`;
+      hudEnemy.classList.remove("hidden");
+    } else hudEnemy.classList.add("hidden");
 
     // 玩家状态栏（装备档位一目了然，损耗可见）
     const sig = f.players.map(p => `${p.id}:${p.alive}:${p.bombsMax}/${p.flameLen}/${p.speedLevel}`).join("|");

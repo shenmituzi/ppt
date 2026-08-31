@@ -88,19 +88,39 @@ function cellHash(gx: number, gy: number): number {
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private vignette: CanvasGradient | null = null;
+  private cameraX = 0;
+  private cameraY = 0;
+  private dragX = 0;
+  private dragY = 0;
+  private dragging = false;
   /** 晴天彩蛋：偶尔飞过的鸟群 */
   private flocks: { start: number; y: number; dir: 1 | -1; count: number; speed: number }[] = [];
   private nextFlockAt = 4000;
 
   constructor(canvas: HTMLCanvasElement) {
-    canvas.width = GRID_W * TILE;
-    canvas.height = GRID_H * TILE;
+    canvas.width = Math.min(1100, Math.max(640, window.innerWidth - 24));
+    canvas.height = Math.min(760, Math.max(420, window.innerHeight - 150));
     this.ctx = canvas.getContext("2d")!;
+    canvas.style.touchAction = "none";
+    canvas.addEventListener("pointerdown", e => {
+      this.dragging = true; this.dragX = e.clientX; this.dragY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointermove", e => {
+      if (!this.dragging) return;
+      this.cameraX -= e.clientX - this.dragX; this.cameraY -= e.clientY - this.dragY;
+      this.dragX = e.clientX; this.dragY = e.clientY; this.clampCamera(canvas);
+    });
+    const release = () => { this.dragging = false; };
+    canvas.addEventListener("pointerup", release); canvas.addEventListener("pointercancel", release);
   }
 
   draw(f: FrameData, nowMs: number, ghosts: GhostView[] = [], viewer: ViewerView | null = null) {
     const { ctx } = this;
-    ctx.clearRect(0, 0, GRID_W * TILE, GRID_H * TILE);
+    const canvas = ctx.canvas;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    this.updateCamera(canvas, viewer);
+    ctx.save(); ctx.translate(-this.cameraX, -this.cameraY);
     this.drawTiles(f.grid);
     for (const [i, s] of SPAWNS.entries()) this.drawSpawnPad(s.gx, s.gy, i);
     this.drawGroundWeather(f);
@@ -159,6 +179,20 @@ export class Renderer {
     }
     this.drawSkyWeather(f, nowMs, viewer);
     this.drawVignette();
+    ctx.restore();
+  }
+
+  private updateCamera(canvas: HTMLCanvasElement, viewer: ViewerView | null) {
+    if (!this.dragging && viewer) {
+      this.cameraX += (center(viewer.x) - canvas.width / 2 - this.cameraX) * 0.12;
+      this.cameraY += (center(viewer.y) - canvas.height / 2 - this.cameraY) * 0.12;
+    }
+    this.clampCamera(canvas);
+  }
+
+  private clampCamera(canvas: HTMLCanvasElement) {
+    this.cameraX = Math.max(0, Math.min(Math.max(0, GRID_W * TILE - canvas.width), this.cameraX));
+    this.cameraY = Math.max(0, Math.min(Math.max(0, GRID_H * TILE - canvas.height), this.cameraY));
   }
 
   private drawTiles(grid: Uint8Array) {
@@ -235,14 +269,20 @@ export class Renderer {
     const { ctx } = this;
     if (!p.alive) return;
     if (p.invincible && Math.floor(nowMs / 150) % 2 === 0) return;
-    drawPlayerBody(ctx, center(p.x), center(p.y), p.colorIndex % 4, p.moving, nowMs);
+    const cx = center(p.x);
+    const cy = center(p.y);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1.45, 1.45);
+    drawPlayerBody(ctx, 0, 0, p.colorIndex % 4, p.moving, nowMs);
+    ctx.restore();
     // 无敌护盾
     if (p.invincible) {
       ctx.strokeStyle = "rgba(255,255,255,.8)";
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
-      ctx.arc(center(p.x), center(p.y), 16, nowMs / 220, nowMs / 220 + Math.PI * 2);
+      ctx.arc(cx, cy, 22, nowMs / 220, nowMs / 220 + Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -251,7 +291,7 @@ export class Renderer {
     const badge = (t: string) => {
       ctx.font = "11px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(t, bx, center(p.y) - 21);
+      ctx.fillText(t, bx, cy - 31);
       bx += 12;
     };
     if (p.bootsOn) badge("❄");
@@ -264,9 +304,9 @@ export class Renderer {
       ctx.textAlign = "center";
       ctx.lineWidth = 3;
       ctx.strokeStyle = "rgba(60,90,60,.65)";
-      ctx.strokeText(p.name, center(p.x), center(p.y) - 15);
+      ctx.strokeText(p.name, cx, cy - 25);
       ctx.fillStyle = "#fff";
-      ctx.fillText(p.name, center(p.x), center(p.y) - 15);
+      ctx.fillText(p.name, cx, cy - 25);
     }
   }
 
@@ -391,15 +431,21 @@ export class Renderer {
 
   private drawMonster(m: FrameData["monsters"][number], nowMs: number) {
     const { ctx } = this;
-    drawMonsterBody(ctx, center(m.x), center(m.y), nowMs);
+    const cx = center(m.x);
+    const cy = center(m.y);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1.45, 1.45);
+    drawMonsterBody(ctx, 0, 0, nowMs);
+    ctx.restore();
     // 血条
-    const w = TILE * 0.8;
+    const w = TILE * 1.05;
     const ratio = Math.max(0, Math.min(1, m.hp / m.maxHp));
     ctx.fillStyle = "rgba(255,252,245,.8)";
-    rr(ctx, center(m.x) - w / 2 - 1, center(m.y) - TILE * 0.72 - 1, w + 2, 5, 2.5);
+    rr(ctx, cx - w / 2 - 1, cy - TILE * 0.92 - 1, w + 2, 7, 3.5);
     ctx.fill();
     ctx.fillStyle = ratio > 0.5 ? "#7fc98a" : ratio > 0.25 ? "#ffcf6b" : "#ff8a8a";
-    rr(ctx, center(m.x) - w / 2, center(m.y) - TILE * 0.72, w * ratio, 3, 1.5);
+    rr(ctx, cx - w / 2, cy - TILE * 0.92, w * ratio, 5, 2.5);
     ctx.fill();
   }
 
