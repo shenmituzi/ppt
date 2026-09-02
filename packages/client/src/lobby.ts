@@ -58,7 +58,7 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
       const names: string[] = [];
       room.state.players.forEach(p => names.push(p.name));
       info.textContent = withStart
-        ? `玩家：${names.join("、")}（${names.length}/4）—— 满员自动开局，房主可直接开始`
+        ? `玩家：${names.join("、")}（${names.length}/${need || 2}）—— 满员自动开局，房主可直接开始`
         : `已进入匹配队列（当前 ${names.length} 人）—— 满员自动开局，请稍候`;
       if (need > 0 && !hinted && names.length < need && Date.now() - startAt > 10_000) {
         hinted = true;
@@ -121,14 +121,16 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
         }
       });
     });
-  document.getElementById("btn-create")!.onclick = () =>
+  const create = (mode: 2 | 4) =>
     guard(async () => {
       say("创建中…");
-      const { room, code } = await createRoom();
-      say(code ? `房间号 ${code} —— 发给朋友，满员自动开局` : "已创建房间");
+      const { room, code } = await createRoom(mode);
+      say(code ? `房间号 ${code} —— ${mode}人房间，满员自动开局` : "已创建房间");
       watchAndEnter(room);
-      showWaiting(room, true);
+      showWaiting(room, true, mode);
     });
+  document.getElementById("btn-create")!.onclick = () => create(2);
+  document.getElementById("btn-create4")!.onclick = () => create(4);
   document.getElementById("btn-join")!.onclick = () =>
     guard(async () => {
       const code = (document.getElementById("room-code") as HTMLInputElement).value.trim();

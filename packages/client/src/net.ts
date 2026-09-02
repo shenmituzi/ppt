@@ -22,8 +22,8 @@ export function adventureMatch(): Promise<Room> {
 }
 
 /** 创建房间；房间号由服务器通过 code 消息回发给房主 */
-export async function createRoom(): Promise<{ room: Room; code: string }> {
-  const room = await colyseus.create("game", {});
+export async function createRoom(mode: 2 | 4 = 2): Promise<{ room: Room; code: string }> {
+  const room = await colyseus.create("game", { mode });
   room.send("code"); // 向服务器询问房间号
   const code = await new Promise<string>(resolve => {
     const timer = setTimeout(() => resolve(""), 3000);

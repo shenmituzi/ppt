@@ -89,6 +89,8 @@ body {
 #screen-lobby .row { display: flex; gap: 8px; }
 #screen-lobby .row input { flex: 1; text-transform: uppercase; letter-spacing: 3px; }
 #screen-lobby .row .btn { width: auto; padding: 11px 20px; }
+#screen-lobby .create-row .btn:first-child { flex: 1; }
+#screen-lobby .create-row .btn:last-child { width: 96px; padding-inline: 8px; font-size: 13px; }
 #lobby-status { text-align: center; color: #8ba378; font-size: 13px; min-height: 1.5em; line-height: 1.5; }
 
 /* ---------- 游戏画面 ---------- */
@@ -220,7 +222,7 @@ body.game-active #touch-layer { display: block; }
   background: rgba(255, 253, 246, .97);
   border: 2px solid #ffe1a8; border-radius: 16px;
   box-shadow: 0 16px 40px rgba(120, 140, 100, .4);
-  padding: 12px;
+  padding: 12px; pointer-events: auto; touch-action: pan-y;
 }
 #shop-panel.hidden { display: none; }
 .shop-head {

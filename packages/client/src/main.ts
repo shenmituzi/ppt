@@ -68,6 +68,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
     shopOpen = !shopOpen;
     document.getElementById("shop-panel")!.classList.toggle("hidden", !shopOpen);
     window.dispatchEvent(new Event("shop-refresh"));
+    shopPanel.setAttribute("aria-hidden", shopOpen ? "false" : "true");
   };
   hudBgm.onclick = () => {
     bgmOn = !bgmOn;
@@ -89,6 +90,8 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
   const panel = document.getElementById("players-panel")!;
   let lastPanelSig = "";
   const shopPanel = document.getElementById("shop-panel")!;
+  shopPanel.addEventListener("pointerdown", e => e.stopPropagation());
+  shopPanel.addEventListener("click", e => e.stopPropagation());
 
   // 商城面板（冒险模式）：购买走 shopBuyHandler，阳光数值从最新帧读取
   let shopSunShown = -1;
