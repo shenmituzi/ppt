@@ -23,7 +23,7 @@ export function adventureMatch(): Promise<Room> {
 
 /** 创建房间；房间号由服务器通过 code 消息回发给房主 */
 export async function createRoom(mode: 2 | 4 = 2): Promise<{ room: Room; code: string }> {
-  const room = await colyseus.create("game", { mode });
+  const room = await colyseus.create("game", { mode, create: true });
   room.send("code"); // 向服务器询问房间号
   const code = await new Promise<string>(resolve => {
     const timer = setTimeout(() => resolve(""), 3000);
@@ -38,7 +38,8 @@ export async function createRoom(mode: 2 | 4 = 2): Promise<{ room: Room; code: s
 /** 按房间号查找并加入（开局后房间已 lock，列表里查不到 → 提示不存在） */
 export async function joinByCode(code: string): Promise<Room> {
   const rooms = await colyseus.getAvailableRooms("game");
-  const target = rooms.find(r => (r.metadata as RoomMeta)?.code === code.toUpperCase());
+  const normalized = code.replace(/\s/g, "").toUpperCase();
+  const target = rooms.find(r => (r.metadata as RoomMeta)?.code === normalized);
   if (!target) throw new Error("房间不存在或已开局");
   return colyseus.joinById(target.roomId, {});
 }

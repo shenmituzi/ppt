@@ -91,6 +91,7 @@ body {
 #screen-lobby .row .btn { width: auto; padding: 11px 20px; }
 #screen-lobby .create-row .btn:first-child { flex: 1; }
 #screen-lobby .create-row .btn:last-child { width: 96px; padding-inline: 8px; font-size: 13px; }
+#screen-lobby .share-room { background: linear-gradient(180deg, #7cc4ff, #4d9fe0); box-shadow: 0 5px 14px rgba(77, 159, 224, .35); }
 #lobby-status { text-align: center; color: #8ba378; font-size: 13px; min-height: 1.5em; line-height: 1.5; }
 
 /* ---------- 游戏画面 ---------- */

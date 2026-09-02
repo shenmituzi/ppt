@@ -9,7 +9,7 @@ import { GameRoomState, PlayerState } from "../state/GameRoomState";
 import { syncState, gridToString } from "../state/sync";
 import { generateRoomCode, generateSeed } from "./code";
 
-interface JoinOptions { mode?: number; gameType?: string }
+interface JoinOptions { mode?: number; gameType?: string; create?: boolean }
 
 const DIR_INPUTS = new Set<string>(["up", "down", "left", "right", "none"]);
 
@@ -36,7 +36,7 @@ export class GameRoom extends Room<GameRoomState> {
     this.setPatchRate(1000 / 15); // 约 15Hz 状态广播
     this.setSimulationInterval(dt => this.tick(dt), 1000 / 60);
 
-    if (options.mode === undefined && options.gameType !== "adventure") {
+    if (options.create === true && options.gameType !== "adventure") {
       // 玩家创建的房间：生成 4 位房间号；房主可询问（客户端拿不到自己的 metadata）
       const code = generateRoomCode();
       this.setMetadata({ code, mode: this.maxClients });

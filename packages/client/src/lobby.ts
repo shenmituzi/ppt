@@ -40,11 +40,26 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
       if (el.id !== "lobby-status") (el as HTMLElement).style.display = "none";
     });
     const info = document.createElement("p");
+    const shareBtn = document.createElement("button");
+    shareBtn.className = "btn share-room";
+    shareBtn.textContent = "📤 立即分享房间";
     const startBtn = document.createElement("button");
     startBtn.className = "btn primary";
     startBtn.textContent = "开始游戏";
     startBtn.onclick = () => room.send("start");
     if (withStart) card.appendChild(startBtn);
+    if (withStart) {
+      shareBtn.onclick = async () => {
+        const code = (status.textContent.match(/[A-Z2-9]{4}/)?.[0]) || "";
+        const text = `来泡泡堂和我一起玩！房间号：${code}`;
+        try {
+          if (navigator.share) await navigator.share({ title: "泡泡堂房间邀请", text });
+          else if (navigator.clipboard) await navigator.clipboard.writeText(text);
+          say(navigator.share ? "邀请已分享" : "房间邀请已复制，发给朋友即可");
+        } catch { say("分享已取消"); }
+      };
+      card.appendChild(shareBtn);
+    }
     card.appendChild(info);
     const startAt = Date.now();
     let hinted = false;
