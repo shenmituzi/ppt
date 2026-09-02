@@ -36,12 +36,10 @@ export function createTouchControls(hub: InputHub): void {
   const atkBtn = document.getElementById("atk-btn")!;
 
   const pointers = new Map<number, { x: number; y: number }>();
-  let anchorX = 0;
-  let anchorY = 0;
+  let startX = 0;
+  let startY = 0;
   let panX = 0;
   let panY = 0;
-  let gesture: "move" | "pan" = "move";
-  let timer: number | null = null;
   let currentDir: Dir | "none" = "none";
 
   const sendDir = (d: Dir | "none") => {
@@ -54,9 +52,7 @@ export function createTouchControls(hub: InputHub): void {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     surface.setPointerCapture(e.pointerId);
     if (pointers.size === 1) {
-      anchorX = e.clientX; anchorY = e.clientY;
-      gesture = "move";
-      timer = window.setTimeout(() => { gesture = "pan"; sendDir("none"); }, 260);
+      startX = e.clientX; startY = e.clientY;
     } else if (pointers.size === 2) {
       sendDir("none");
       panX = [...pointers.values()].reduce((n, p) => n + p.x, 0) / 2;
@@ -76,26 +72,14 @@ export function createTouchControls(hub: InputHub): void {
       sendDir("none");
       return;
     }
-    if (gesture === "pan") {
-      window.dispatchEvent(new CustomEvent("camera-pan", { detail: { dx: e.clientX - anchorX, dy: e.clientY - anchorY } }));
-      anchorX = e.clientX; anchorY = e.clientY;
-      return;
-    }
-    const d = dirFromOffset(e.clientX - anchorX, e.clientY - anchorY);
-    if (d !== "none") {
-      sendDir(d);
-      // 连续转向以最近一次有效滑动为基准，不必跨回最初触点。
-      anchorX = e.clientX; anchorY = e.clientY;
-    }
+    // 单指方向以本次触摸的累计位移为准；方向会持续保持到松手，支持连续走格。
+    const d = dirFromOffset(e.clientX - startX, e.clientY - startY);
+    if (d !== "none") sendDir(d);
   });
   const release = (e: PointerEvent) => {
     if (!pointers.delete(e.pointerId)) return;
-    if (timer) { clearTimeout(timer); timer = null; }
     if (pointers.size === 0) sendDir("none");
-    else {
-      const p = [...pointers.values()][0];
-      anchorX = p.x; anchorY = p.y;
-    }
+    else { const p = [...pointers.values()][0]; startX = p.x; startY = p.y; }
   };
   surface.addEventListener("pointerup", release);
   surface.addEventListener("pointercancel", release);
