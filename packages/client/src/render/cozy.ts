@@ -515,19 +515,19 @@ export function drawMonsterBody(ctx: CanvasRenderingContext2D, cx: number, cy: n
   ctx.ellipse(cx, cy + 9, 10, 3.4, 0, 0, Math.PI * 2);
   ctx.fill();
   const g = ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, 13);
-  g.addColorStop(0, "#c9aef5");
-  g.addColorStop(1, "#8f68d8");
+  g.addColorStop(0, "#ffb36b");
+  g.addColorStop(1, "#d94f63");
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.ellipse(cx, cy, 12, 10.5 * (1 + squash), 0, 0, Math.PI * 2);
   ctx.fill();
   // 肚皮
-  ctx.fillStyle = "rgba(240,232,255,.8)";
+  ctx.fillStyle = "rgba(255,240,205,.9)";
   ctx.beginPath();
   ctx.ellipse(cx, cy + 3.5, 6.5, 4.5, 0, 0, Math.PI * 2);
   ctx.fill();
   // 犄角
-  ctx.fillStyle = "#6c4bb0";
+  ctx.fillStyle = "#9e304f";
   for (const s of [-1, 1]) {
     ctx.beginPath();
     ctx.moveTo(cx + s * 6, cy - 8);
@@ -553,7 +553,7 @@ export function drawMonsterBody(ctx: CanvasRenderingContext2D, cx: number, cy: n
   ctx.arc(cx + 5.3, cy - 2.2, 0.7, 0, Math.PI * 2);
   ctx.fill();
   // 嘴（小表情）
-  ctx.strokeStyle = "#5c3f96";
+  ctx.strokeStyle = "#7d253d";
   ctx.lineWidth = 1.4;
   ctx.lineCap = "round";
   ctx.beginPath();

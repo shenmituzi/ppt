@@ -1021,18 +1021,36 @@ export class GameSim {
     const dx = t.gx - mx;
     const dy = t.gy - my;
     if (dx === 0 && dy === 0) return null;
-    const dirs: Dir[] =
-      Math.abs(dx) >= Math.abs(dy)
-        ? [dx > 0 ? "right" : "left", dy > 0 ? "down" : "up"]
-        : [dy > 0 ? "down" : "up", dx > 0 ? "right" : "left"];
-    for (const d of dirs) {
-      if (d && this.isCellFree(mx + dirDx(d), my + dirDy(d))) return d;
+    // BFS 覆盖整个地图，避免在障碍边缘上下反复抖动。
+    const queue: Vec[] = [{ gx: mx, gy: my }];
+    const first = new Map<string, Dir>();
+    const seen = new Set([`${mx},${my}`]);
+    const dirs: Dir[] = ["up", "down", "left", "right"];
+    while (queue.length) {
+      const cur = queue.shift()!;
+      if (cur.gx === t.gx && cur.gy === t.gy) break;
+      for (const d of dirs) {
+        const nx = cur.gx + dirDx(d), ny = cur.gy + dirDy(d);
+        if (nx < 1 || nx >= GRID_W - 1 || ny < 1 || ny >= GRID_H - 1) continue;
+        const key = `${nx},${ny}`;
+        if (seen.has(key)) continue;
+        const tile = this.grid[ny * GRID_W + nx];
+        if (tile === Tile.HardWall || this.houseBlock.has(ny * GRID_W + nx)) continue;
+        seen.add(key);
+        first.set(key, first.get(`${cur.gx},${cur.gy}`) ?? d);
+        queue.push({ gx: nx, gy: ny });
+        if (nx === t.gx && ny === t.gy) return first.get(key)!;
+      }
     }
-    const fallback = (["up", "down", "left", "right"] as Dir[]).filter(
-      d => this.isCellFree(mx + dirDx(d), my + dirDy(d)),
-    );
-    if (!fallback.length) return null;
-    return fallback[Math.floor(this.rng() * fallback.length)];
+    // 找不到完整路径时，允许怪物跳过一格可炸障碍物并继续追击。
+    for (const d of dirs) {
+      const nx = mx + dirDx(d), ny = my + dirDy(d);
+      if (this.grid[ny * GRID_W + nx] >= Tile.SoftWall) {
+        this.grid[ny * GRID_W + nx] = Tile.Floor;
+        return d;
+      }
+    }
+    return dirs.find(d => this.isCellFree(mx + dirDx(d), my + dirDy(d))) ?? null;
   }
 
   private houseAlive(id: number): boolean {
