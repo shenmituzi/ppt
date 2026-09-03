@@ -20,6 +20,9 @@ export interface DeviceStateView {
   id: string; type: string; gx: number; gy: number;
 }
 export interface GameRoomStateView {
+  mapId: string;
+  vineCells: number[];
+  vineRegrowAt: number[];
   phase: "waiting" | "gathering" | "playing" | "ended";
   gameType: string;
   weather: string;

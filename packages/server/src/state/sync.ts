@@ -15,7 +15,10 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
   state.serverElapsedMs = Math.floor(sim.elapsedMs);
   state.phase = sim.phase;
   state.gameType = sim.gameType;
+  state.mapId = sim.mapId;
   state.grid = gridToString(sim.grid);
+  state.vineCells.splice(0, state.vineCells.length, ...sim.vineCells);
+  state.vineRegrowAt.splice(0, state.vineRegrowAt.length, ...[...sim.vineRegrowAt.entries()].flatMap(([i, at]) => [i, at]));
 
   for (const [id, p] of sim.players) {
     let ps = state.players.get(id);

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   GRID_W, SPAWN_INVINCIBLE_MS, SUDDEN_DEATH_AT_MS, SUDDEN_DEATH_STEP_MS,
-  ItemType, MAX_BOMBS, MAX_FLAMES, MAX_SPEED_LEVEL, Tile,
+  BOMB_FUSE_MS, ItemType, MAX_BOMBS, MAX_FLAMES, MAX_SPEED_LEVEL, Tile,
 } from "./constants";
 import { GameSim } from "./gridsim";
 
@@ -69,6 +69,27 @@ describe("GameSim 移动", () => {
 });
 
 describe("GameSim 泡泡与爆炸", () => {
+  it("阳光花园藤蔓被炸掉后会再生，格子被占用时顺延", () => {
+    const sim = new GameSim(19, ["a", "b"], undefined, "sunny", { gameType: "adventure", mapId: "garden" });
+    const vine = [...sim.vineCells].find(i => i % GRID_W > 2 && sim.grid[i - 1] !== Tile.HardWall)!;
+    expect(vine).toBeDefined();
+    const p = sim.players.get("a")!;
+    const gx = vine % GRID_W, gy = Math.floor(vine / GRID_W);
+    p.x = gx - 1; p.y = gy; sim.grid[idx(gx - 1, gy)] = Tile.Floor;
+    sim.placeBomb("a");
+    sim.step(BOMB_FUSE_MS + 1);
+    expect(sim.grid[vine]).toBe(Tile.Floor);
+    expect(sim.vineRegrowAt.has(vine)).toBe(true);
+    p.alive = true; p.x = gx; p.y = gy;
+    sim.step(10_000);
+    expect(sim.grid[vine]).toBe(Tile.Floor);
+    p.x = 1; p.y = 1;
+    sim.step(499);
+    expect(sim.grid[vine]).toBe(Tile.Floor);
+    sim.step(501);
+    expect(sim.grid[vine]).toBe(Tile.SoftWall);
+    expect(sim.vineRegrowAt.has(vine)).toBe(false);
+  });
   it("放泡泡受数量上限约束，同格不能重复放", () => {
     const sim = makeSim();
     const a = sim.players.get("a")!;

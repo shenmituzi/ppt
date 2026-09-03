@@ -131,7 +131,7 @@ export class Renderer {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     this.updateCamera(canvas, viewer);
     ctx.save(); ctx.translate(-this.cameraX, -this.cameraY);
-    this.drawTiles(f.grid);
+    this.drawTiles(f.grid, f.mapId, f.vineCells, f.vineRegrowth);
     for (const [i, s] of SPAWNS.entries()) this.drawSpawnPad(s.gx, s.gy, i);
     this.drawGroundWeather(f);
     // 穿梭胶囊（地面层，呼吸光圈）
@@ -205,12 +205,14 @@ export class Renderer {
     this.cameraY = Math.max(0, Math.min(Math.max(0, GRID_H * TILE - canvas.height), this.cameraY));
   }
 
-  private drawTiles(grid: Uint8Array) {
+  private drawTiles(grid: Uint8Array, mapId: string = "classic", vineCells: number[] = [], vineRegrowth = new Map<number, number>()) {
     // 第一遍：草地（水晶缝隙透出地面）
     for (let gy = 0; gy < GRID_H; gy++) {
       for (let gx = 0; gx < GRID_W; gx++) {
         const h = cellHash(gx, gy);
-        const tile = h % 17 === 0 ? TILES.grassFlower : h % 2 === 0 ? TILES.grassA : TILES.grassB;
+        const tile = mapId === "garden"
+          ? (h % 11 === 0 ? TILES.grassFlower : TILES.grassA)
+          : (h % 17 === 0 ? TILES.grassFlower : h % 2 === 0 ? TILES.grassA : TILES.grassB);
         this.ctx.drawImage(tile, gx * TILE, gy * TILE, TILE, TILE);
       }
     }
@@ -224,11 +226,24 @@ export class Renderer {
           this.ctx.drawImage(TILES.hedge, x, y, TILE, TILE);
         } else if (t >= Tile.SoftWall) {
           this.ctx.drawImage(TILES.soft[t - Tile.SoftWall], x, y, TILE, TILE);
+          if (mapId === "garden" && vineCells.includes(gy * GRID_W + gx)) {
+            this.ctx.strokeStyle = "#3f9b55"; this.ctx.lineWidth = 3;
+            rr(this.ctx, x + 5, y + 5, TILE - 10, TILE - 10, 10); this.ctx.stroke();
+          }
         } else if (gy > 0 && grid[(gy - 1) * GRID_W + gx] !== Tile.Floor) {
           // 墙根投影
           this.ctx.fillStyle = "rgba(50,90,50,.14)";
           this.ctx.fillRect(x, y, TILE, 5);
         }
+      }
+    }
+    if (mapId === "garden") {
+      this.ctx.fillStyle = "rgba(91,190,170,.18)";
+      this.ctx.fillRect(7 * TILE, 0, 2 * TILE, GRID_H * TILE);
+      for (const [cell] of vineRegrowth) {
+        const gx = cell % GRID_W, gy = Math.floor(cell / GRID_W);
+        this.ctx.fillStyle = "rgba(63,155,85,.45)"; this.ctx.beginPath();
+        this.ctx.arc(gx * TILE + TILE / 2, gy * TILE + TILE / 2, 7, 0, Math.PI * 2); this.ctx.fill();
       }
     }
   }

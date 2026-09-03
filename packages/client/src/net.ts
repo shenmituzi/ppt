@@ -17,8 +17,8 @@ export function quickMatch(mode: 2 | 4): Promise<Room> {
 }
 
 /** 冒险模式：5 人席位（真人+人机补位） */
-export function adventureMatch(): Promise<Room> {
-  return colyseus.joinOrCreate("game", { mode: 5, gameType: "adventure" });
+export function adventureMatch(mapId: "classic" | "garden" = "garden"): Promise<Room> {
+  return colyseus.joinOrCreate("game", { mode: 5, gameType: "adventure", mapId });
 }
 
 /** 创建房间；房间号由服务器通过 code 消息回发给房主 */

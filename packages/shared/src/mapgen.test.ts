@@ -73,4 +73,18 @@ describe("generateMap", () => {
     const diff = a.some((t, i) => isSoft(t) && isSoft(b[i]) && t !== b[i]);
     expect(diff).toBe(true);
   });
+
+  it("阳光花园是确定性的，并包含边界、安全区与藤蔓区域", () => {
+    const a = generateMap(77, "sunny", "garden");
+    const b = generateMap(77, "sunny", "garden");
+    expect([...a.grid]).toEqual([...b.grid]);
+    expect(a.mapId).toBe("garden");
+    expect(a.vineCells.length).toBeGreaterThan(8);
+    expect(a.vineCells.length).toBeLessThan(100);
+    for (const s of SPAWNS) {
+      expect(a.grid[idx(s.gx, s.gy)]).toBe(Tile.Floor);
+      expect(a.grid[idx(s.gx + 1, s.gy)]).not.toBe(Tile.HardWall);
+    }
+    for (let x = 0; x < GRID_W; x++) expect(a.grid[idx(x, 0)]).toBe(Tile.HardWall);
+  });
 });

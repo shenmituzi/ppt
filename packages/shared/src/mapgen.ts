@@ -1,9 +1,11 @@
-import { GRID_W, GRID_H, Tile, SOFT_WALL_RATIO, SPAWNS, type WeatherType } from "./constants";
+import { GRID_W, GRID_H, Tile, SOFT_WALL_RATIO, SPAWNS, type WeatherType, type MapId } from "./constants";
 import { Vec } from "./types";
 
 export interface GameMap {
   grid: Uint8Array;
   spawns: Vec[];
+  mapId: MapId;
+  vineCells: number[];
 }
 
 /** 确定性随机数生成器 */
@@ -39,7 +41,19 @@ function pickDestructible(weather: WeatherType, rng: () => number): Tile {
  * 生成 15×13 地图：外圈硬墙 + 棋盘格石柱 + 成簇分布的可炸方块（按天气着外观）。
  * 四角出生点 3×3 安全区无障碍，且朝地图中心方向各让出一格通路。
  */
-export function generateMap(seed: number, weather: WeatherType = "sunny"): GameMap {
+export function generateMap(seed: number, weather: WeatherType = "sunny", mapId: MapId = "classic"): GameMap {
+  if (mapId === "garden") {
+    const base = generateMap(seed, weather, "classic");
+    const grid = base.grid.slice(); const vines: number[] = [];
+    const idx = (x: number, y: number) => y * GRID_W + x;
+    const safe = (x: number, y: number) => SPAWNS.some(s => Math.abs(x - s.gx) <= 2 && Math.abs(y - s.gy) <= 2);
+    for (let y = 1; y < GRID_H - 1; y++) for (let x = 1; x < GRID_W - 1; x++) {
+      const i = idx(x, y); if (safe(x, y) || grid[i] === Tile.HardWall) continue;
+      if (x >= 7 && x <= 8) grid[i] = (x + y) % 2 ? Tile.Rock : Tile.Ice;
+      else if (grid[i] >= Tile.SoftWall && (x < 7 || y >= 9)) vines.push(i);
+    }
+    return { grid, spawns: base.spawns, mapId: "garden", vineCells: vines };
+  }
   const rng = mulberry32(seed);
   const grid = new Uint8Array(GRID_W * GRID_H).fill(Tile.Floor);
   const idx = (gx: number, gy: number) => gy * GRID_W + gx;
@@ -103,5 +117,5 @@ export function generateMap(seed: number, weather: WeatherType = "sunny"): GameM
     }
   }
 
-  return { grid, spawns: SPAWNS.map(s => ({ ...s })) };
+  return { grid, spawns: SPAWNS.map(s => ({ ...s })), mapId: "classic", vineCells: [] };
 }

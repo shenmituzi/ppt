@@ -109,6 +109,8 @@ export const SPAWNS = [
 // ---------- 冒险模式 ----------
 
 export type GameType = "pvp" | "adventure";
+export type MapId = "classic" | "garden";
+export const VINE_REGROW_MS = 10_000;
 export const ADVENTURE_PLAYERS = 5; // 冒险模式总席位（真人+人机）
 export const GATHER_MS = 120_000; // 装备搜集期时长
 

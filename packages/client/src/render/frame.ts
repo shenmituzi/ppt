@@ -1,4 +1,4 @@
-import { FLAME_MS, GameSim, GRID_H, GRID_W, ItemType, SUDDEN_DEATH_AT_MS, Vec } from "@pt/shared";
+import { FLAME_MS, GameSim, GRID_H, GRID_W, ItemType, SUDDEN_DEATH_AT_MS, Vec, type MapId } from "@pt/shared";
 
 export interface PlayerView {
   id: string;
@@ -46,6 +46,9 @@ export interface DeviceView {
 }
 
 export interface FrameData {
+  mapId: MapId;
+  vineCells: number[];
+  vineRegrowth: Map<number, number>;
   grid: Uint8Array;
   players: PlayerView[];
   bombs: BombView[];
@@ -75,6 +78,7 @@ type Phase = "waiting" | "gathering" | "playing" | "ended";
 /** 单机模式：直接从 GameSim 构造渲染帧 */
 export function simToFrame(sim: GameSim): FrameData {
   return {
+    mapId: sim.mapId, vineCells: [...sim.vineCells], vineRegrowth: new Map(sim.vineRegrowAt),
     grid: sim.grid,
     players: [...sim.players.values()].map(p => ({
       id: p.id,
@@ -240,6 +244,9 @@ export class OnlineFrameBuilder {
     const devices: DeviceView[] = [];
     s.devices.forEach((d: any) => devices.push({ id: d.id, type: d.type, gx: d.gx, gy: d.gy }));
     return {
+      mapId: s.mapId === "garden" ? "garden" : "classic",
+      vineCells: [...s.vineCells],
+      vineRegrowth: new Map(Array.from(s.vineRegrowAt ?? []).reduce((m: Map<number, number>, v: number, i: number, a: number[]) => { if (i % 2 === 0) m.set(v, a[i + 1]); return m; }, new Map<number, number>())),
       grid: this.gridData,
       players,
       bombs,

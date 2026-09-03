@@ -16,7 +16,7 @@ import {
   LASER_RANGE, LASER_COOLDOWN, PISTOL_COOLDOWN, PISTOL_SPEED, PISTOL_RANGE,
   PORTAL_TTL, PORTAL_COOLDOWN, CAPTURE_RANGE, CAPTURE_MS,
   SPAWNS,
-  Tile, ItemType, isSoft, type WeatherType, type GameType,
+  Tile, ItemType, isSoft, VINE_REGROW_MS, type WeatherType, type GameType, type MapId,
 } from "./constants";
 import { Dir, DirInput, GameEvent, Vec, dirDx, dirDy } from "./types";
 import { generateMap, mulberry32 } from "./mapgen";
@@ -153,10 +153,14 @@ export interface SimDevice {
 
 export interface GameSimOpts {
   gameType?: GameType;
+  mapId?: MapId;
 }
 
 export class GameSim {
   grid: Uint8Array;
+  mapId: MapId;
+  vineCells = new Set<number>();
+  vineRegrowAt = new Map<number, number>();
   players = new Map<string, SimPlayer>();
   bombs: SimBomb[] = [];
   explosions: SimExplosion[] = [];
@@ -196,8 +200,10 @@ export class GameSim {
     opts: GameSimOpts = {},
   ) {
     this.gameType = opts.gameType ?? "pvp";
-    const map = generateMap(seed, weather);
+    this.mapId = opts.mapId ?? "classic";
+    const map = generateMap(seed, weather, this.mapId);
     this.grid = map.grid;
+    this.vineCells = new Set(map.vineCells);
     this.weather = weather;
     this.rng = rngOverride ?? mulberry32((seed ^ 0x9e3779b9) >>> 0);
     playerIds.forEach((id, i) => {
@@ -267,7 +273,20 @@ export class GameSim {
       this.stepDecay();
     }
     this.stepSuddenDeath();
+    this.stepVineRegrowth();
     this.checkEnd();
+  }
+
+  private stepVineRegrowth() {
+    if (this.mapId !== "garden") return;
+    for (const [i, at] of this.vineRegrowAt) {
+      if (this.elapsedMs < at) continue;
+      const gx = i % GRID_W, gy = Math.floor(i / GRID_W);
+      const occupied = [...this.players.values()].some(p => p.alive && Math.round(p.x) === gx && Math.round(p.y) === gy)
+        || this.items.has(i) || this.bombAt(gx, gy) || this.explosions.some(e => e.cells.some(c => c.gx === gx && c.gy === gy));
+      if (!occupied && this.grid[i] === Tile.Floor) { this.grid[i] = Tile.SoftWall; this.vineRegrowAt.delete(i); }
+      else if (occupied) this.vineRegrowAt.set(i, this.elapsedMs + 500);
+    }
   }
 
   /** 冒险模式：蘑菇产阳光 + 怪物死亡掉阳光由伤害来源结算 */
@@ -526,7 +545,9 @@ export class GameSim {
     const i = c.gy * GRID_W + c.gx;
     const existingItem = this.items.get(i); // 火焰烧毁的是爆炸前就存在的道具
     if (isSoft(this.grid[i])) {
+      const vine = this.mapId === "garden" && this.vineCells.has(i);
       this.grid[i] = Tile.Floor;
+      if (vine) this.vineRegrowAt.set(i, this.elapsedMs + VINE_REGROW_MS);
       const item = this.rollDrop();
       if (item !== null) {
         this.items.set(i, { id: this.nextId++, gx: c.gx, gy: c.gy, type: item });

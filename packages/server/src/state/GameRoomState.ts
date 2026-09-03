@@ -93,6 +93,9 @@ export class HouseState extends Schema {
 }
 
 export class GameRoomState extends Schema {
+  @type("string") mapId = "classic";
+  @type(["int16"]) vineCells = new ArraySchema<number>();
+  @type(["uint32"]) vineRegrowAt = new ArraySchema<number>();
   @type("string") phase: string = "waiting";
   @type("string") gameType: string = "pvp";
   @type("string") weather: string = Weather.Sunny;

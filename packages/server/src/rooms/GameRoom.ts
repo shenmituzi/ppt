@@ -1,7 +1,7 @@
 import type { Client } from "colyseus";
 import {
   GameSim, SUDDEN_DEATH_AT_MS, WEATHERS, pickAdventureWeather,
-  type DirInput, type WeatherType, type GameType,
+  type DirInput, type WeatherType, type GameType, type MapId,
 } from "@pt/shared";
 import { Room } from "../interop";
 import { BotBrain } from "../bots";
@@ -9,7 +9,7 @@ import { GameRoomState, PlayerState } from "../state/GameRoomState";
 import { syncState, gridToString } from "../state/sync";
 import { generateRoomCode, generateSeed } from "./code";
 
-interface JoinOptions { mode?: number; gameType?: string; create?: boolean }
+interface JoinOptions { mode?: number; gameType?: string; create?: boolean; mapId?: string }
 
 const DIR_INPUTS = new Set<string>(["up", "down", "left", "right", "none"]);
 
@@ -26,8 +26,10 @@ export class GameRoom extends Room<GameRoomState> {
   private sim: GameSim | undefined;
   private bots: BotBrain[] = [];
   private startScheduled = false;
+  private requestedMapId: MapId = "classic";
 
   onCreate(options: JoinOptions) {
+    this.requestedMapId = options.mapId === "garden" ? "garden" : "classic";
     this.gameType = options.gameType === "adventure" ? "adventure" : "pvp";
     this.maxClients = this.gameType === "adventure"
       ? 5
@@ -128,6 +130,7 @@ export class GameRoom extends Room<GameRoomState> {
     const weather: WeatherType = this.gameType === "adventure"
       ? pickAdventureWeather(Math.random)
       : WEATHERS[(Math.random() * WEATHERS.length) | 0];
+    const mapId: MapId = this.gameType === "adventure" ? this.requestedMapId : "classic";
     if (this.gameType === "adventure") {
       const missing = this.maxClients - this.joinOrder.length;
       for (let i = 0; i < missing; i++) {
@@ -147,7 +150,7 @@ export class GameRoom extends Room<GameRoomState> {
       this.joinOrder,
       undefined,
       weather,
-      { gameType: this.gameType },
+      { gameType: this.gameType, mapId },
     );
     // 给每个人机挂上 AI 大脑
     if (this.gameType === "adventure") {
@@ -156,6 +159,7 @@ export class GameRoom extends Room<GameRoomState> {
         .map(id => new BotBrain(this.sim!, id));
     }
     this.state.grid = gridToString(this.sim.grid);
+    this.state.mapId = mapId;
     this.state.weather = weather;
     this.state.gameType = this.gameType;
     this.state.gatherEndsAt = this.gameType === "adventure" ? 120_000 : 0;
