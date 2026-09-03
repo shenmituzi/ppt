@@ -21,6 +21,8 @@ export interface DeviceStateView {
 }
 export interface GameRoomStateView {
   mapId: string;
+  gardenPhase: "day" | "night";
+  gardenPhaseProgress: number;
   vineCells: number[];
   vineRegrowAt: number[];
   phase: "waiting" | "gathering" | "playing" | "ended";

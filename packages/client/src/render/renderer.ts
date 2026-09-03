@@ -131,7 +131,7 @@ export class Renderer {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     this.updateCamera(canvas, viewer);
     ctx.save(); ctx.translate(-this.cameraX, -this.cameraY);
-    this.drawTiles(f.grid, f.mapId, f.vineCells, f.vineRegrowth);
+    this.drawTiles(f.grid, f.mapId, f.vineCells, f.vineRegrowth, f.elapsedMs);
     for (const [i, s] of SPAWNS.entries()) this.drawSpawnPad(s.gx, s.gy, i);
     this.drawGroundWeather(f);
     // 穿梭胶囊（地面层，呼吸光圈）
@@ -188,6 +188,7 @@ export class Renderer {
       ctx.stroke();
     }
     this.drawSkyWeather(f, nowMs, viewer);
+    this.drawGardenNight(f, nowMs);
     this.drawVignette();
     ctx.restore();
   }
@@ -205,15 +206,16 @@ export class Renderer {
     this.cameraY = Math.max(0, Math.min(Math.max(0, GRID_H * TILE - canvas.height), this.cameraY));
   }
 
-  private drawTiles(grid: Uint8Array, mapId: string = "classic", vineCells: number[] = [], vineRegrowth = new Map<number, number>()) {
+  private drawTiles(grid: Uint8Array, mapId: string = "classic", vineCells: number[] = [], vineRegrowth = new Map<number, number>(), elapsedMs = 0) {
     // 第一遍：草地（水晶缝隙透出地面）
     for (let gy = 0; gy < GRID_H; gy++) {
       for (let gx = 0; gx < GRID_W; gx++) {
         const h = cellHash(gx, gy);
         const tile = mapId === "garden"
-          ? (h % 11 === 0 ? TILES.grassFlower : TILES.grassA)
+          ? TILES.grassA
           : (h % 17 === 0 ? TILES.grassFlower : h % 2 === 0 ? TILES.grassA : TILES.grassB);
         this.ctx.drawImage(tile, gx * TILE, gy * TILE, TILE, TILE);
+        if (mapId === "garden" && h % 7 === 0) this.drawGardenFlower(gx, gy, h);
       }
     }
     // 第二遍：墙与可炸方块
@@ -227,8 +229,14 @@ export class Renderer {
         } else if (t >= Tile.SoftWall) {
           this.ctx.drawImage(TILES.soft[t - Tile.SoftWall], x, y, TILE, TILE);
           if (mapId === "garden" && vineCells.includes(gy * GRID_W + gx)) {
-            this.ctx.strokeStyle = "#3f9b55"; this.ctx.lineWidth = 3;
+            const remaining = vineRegrowth.get(gy * GRID_W + gx);
+            const growing = remaining === undefined ? 1 : Math.max(0.12, Math.min(1, 1 - Math.max(0, remaining - elapsedMs) / 10_000));
+            this.ctx.save();
+            this.ctx.strokeStyle = `rgba(63,155,85,${0.55 + growing * 0.35})`; this.ctx.lineWidth = 3.5;
             rr(this.ctx, x + 5, y + 5, TILE - 10, TILE - 10, 10); this.ctx.stroke();
+            this.ctx.strokeStyle = "#9cdb75"; this.ctx.lineWidth = 2;
+            this.ctx.beginPath(); this.ctx.moveTo(x + 12, y + TILE - 10); this.ctx.quadraticCurveTo(x + TILE * .45, y + TILE * (1 - growing), x + TILE - 12, y + 12); this.ctx.stroke();
+            this.ctx.restore();
           }
         } else if (gy > 0 && grid[(gy - 1) * GRID_W + gx] !== Tile.Floor) {
           // 墙根投影
@@ -238,14 +246,46 @@ export class Renderer {
       }
     }
     if (mapId === "garden") {
-      this.ctx.fillStyle = "rgba(91,190,170,.18)";
-      this.ctx.fillRect(7 * TILE, 0, 2 * TILE, GRID_H * TILE);
+      // hardwall 溪流由 shared 生成，水面只覆盖这些权威格子。
+      for (let gy = 1; gy < GRID_H - 1; gy++) for (let gx = 1; gx < GRID_W - 1; gx++) {
+        if (grid[gy * GRID_W + gx] !== Tile.HardWall) continue;
+        const x = gx * TILE, y = gy * TILE;
+        this.ctx.fillStyle = "#73c9b0"; this.ctx.fillRect(x, y, TILE, TILE);
+        this.ctx.strokeStyle = "rgba(255,255,255,.42)"; this.ctx.lineWidth = 2;
+        this.ctx.beginPath(); this.ctx.moveTo(x + 10, y + 23); this.ctx.quadraticCurveTo(x + 30, y + 14, x + 53, y + 23); this.ctx.stroke();
+      }
       for (const [cell] of vineRegrowth) {
         const gx = cell % GRID_W, gy = Math.floor(cell / GRID_W);
         this.ctx.fillStyle = "rgba(63,155,85,.45)"; this.ctx.beginPath();
         this.ctx.arc(gx * TILE + TILE / 2, gy * TILE + TILE / 2, 7, 0, Math.PI * 2); this.ctx.fill();
       }
     }
+  }
+
+  private drawGardenFlower(gx: number, gy: number, hash: number) {
+    const ctx = this.ctx; const colors = ["#fff4bd", "#f59b91", "#d9b6ef", "#fffdf6"];
+    const x = gx * TILE + 12 + (hash % 38), y = gy * TILE + 12 + ((hash >>> 8) % 38);
+    ctx.fillStyle = colors[hash % colors.length];
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(x + Math.cos(i * Math.PI / 2) * 3, y + Math.sin(i * Math.PI / 2) * 3, 2.5, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = "#f6c957"; ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  private drawGardenNight(f: FrameData, nowMs: number) {
+    if (f.mapId !== "garden") return;
+    const p = f.gardenPhaseProgress;
+    const night = f.gardenPhase === "night";
+    const edge = night ? Math.min(1, (p - .5) * 8) : Math.min(1, Math.max(0, (p - .0) * 8));
+    const alpha = night ? .22 * edge : .22 * (1 - edge);
+    if (alpha > .01) { this.ctx.fillStyle = `rgba(45,64,90,${alpha})`; this.ctx.fillRect(0, 0, GRID_W * TILE, GRID_H * TILE); }
+    if (!night) return;
+    this.ctx.fillStyle = "#ffe49a";
+    for (let i = 0; i < 18; i++) {
+      const h = cellHash(i + 31, 97); const x = (h % (GRID_W * TILE - 20)) + 10;
+      const y = ((h >>> 7) % (GRID_H * TILE - 20)) + 10;
+      const pulse = .45 + .35 * Math.sin(nowMs / 300 + i);
+      this.ctx.globalAlpha = pulse; this.ctx.beginPath(); this.ctx.arc(x, y, 2.2, 0, Math.PI * 2); this.ctx.fill();
+    }
+    this.ctx.globalAlpha = 1;
   }
 
   private drawSpawnPad(gx: number, gy: number, colorIndex: number) {

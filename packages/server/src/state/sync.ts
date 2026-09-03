@@ -16,6 +16,8 @@ export function syncState(state: GameRoomState, sim: GameSim): void {
   state.phase = sim.phase;
   state.gameType = sim.gameType;
   state.mapId = sim.mapId;
+  state.gardenPhase = sim.gardenPhase;
+  state.gardenPhaseProgress = sim.gardenPhaseProgress;
   state.grid = gridToString(sim.grid);
   state.vineCells.splice(0, state.vineCells.length, ...sim.vineCells);
   state.vineRegrowAt.splice(0, state.vineRegrowAt.length, ...[...sim.vineRegrowAt.entries()].flatMap(([i, at]) => [i, at]));

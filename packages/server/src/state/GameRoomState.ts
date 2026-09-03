@@ -94,6 +94,8 @@ export class HouseState extends Schema {
 
 export class GameRoomState extends Schema {
   @type("string") mapId = "classic";
+  @type("string") gardenPhase = "day";
+  @type("float32") gardenPhaseProgress = 0;
   @type(["int16"]) vineCells = new ArraySchema<number>();
   @type(["uint32"]) vineRegrowAt = new ArraySchema<number>();
   @type("string") phase: string = "waiting";

@@ -49,7 +49,9 @@ export function generateMap(seed: number, weather: WeatherType = "sunny", mapId:
     const safe = (x: number, y: number) => SPAWNS.some(s => Math.abs(x - s.gx) <= 2 && Math.abs(y - s.gy) <= 2);
     for (let y = 1; y < GRID_H - 1; y++) for (let x = 1; x < GRID_W - 1; x++) {
       const i = idx(x, y); if (safe(x, y) || grid[i] === Tile.HardWall) continue;
-      if (x >= 7 && x <= 8) grid[i] = (x + y) % 2 ? Tile.Rock : Tile.Ice;
+      // 斜向溪流是 garden 的权威阻挡带，客户端仅按 HardWall 绘制水面。
+      const streamX = 6 + Math.floor(y / 4);
+      if (x === streamX || x === streamX + 1) grid[i] = Tile.HardWall;
       else if (grid[i] >= Tile.SoftWall && (x < 7 || y >= 9)) vines.push(i);
     }
     return { grid, spawns: base.spawns, mapId: "garden", vineCells: vines };

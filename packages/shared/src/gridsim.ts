@@ -16,7 +16,7 @@ import {
   LASER_RANGE, LASER_COOLDOWN, PISTOL_COOLDOWN, PISTOL_SPEED, PISTOL_RANGE,
   PORTAL_TTL, PORTAL_COOLDOWN, CAPTURE_RANGE, CAPTURE_MS,
   SPAWNS,
-  Tile, ItemType, isSoft, VINE_REGROW_MS, type WeatherType, type GameType, type MapId,
+  Tile, ItemType, isSoft, VINE_REGROW_MS, GARDEN_DAY_CYCLE_MS, type WeatherType, type GameType, type MapId,
 } from "./constants";
 import { Dir, DirInput, GameEvent, Vec, dirDx, dirDy } from "./types";
 import { generateMap, mulberry32 } from "./mapgen";
@@ -159,6 +159,8 @@ export interface GameSimOpts {
 export class GameSim {
   grid: Uint8Array;
   mapId: MapId;
+  get gardenPhase(): "day" | "night" { return this.elapsedMs % GARDEN_DAY_CYCLE_MS < GARDEN_DAY_CYCLE_MS / 2 ? "day" : "night"; }
+  get gardenPhaseProgress(): number { return (this.elapsedMs % GARDEN_DAY_CYCLE_MS) / GARDEN_DAY_CYCLE_MS; }
   vineCells = new Set<number>();
   vineRegrowAt = new Map<number, number>();
   players = new Map<string, SimPlayer>();

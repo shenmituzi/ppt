@@ -47,6 +47,8 @@ export interface DeviceView {
 
 export interface FrameData {
   mapId: MapId;
+  gardenPhase: "day" | "night";
+  gardenPhaseProgress: number;
   vineCells: number[];
   vineRegrowth: Map<number, number>;
   grid: Uint8Array;
@@ -78,7 +80,8 @@ type Phase = "waiting" | "gathering" | "playing" | "ended";
 /** 单机模式：直接从 GameSim 构造渲染帧 */
 export function simToFrame(sim: GameSim): FrameData {
   return {
-    mapId: sim.mapId, vineCells: [...sim.vineCells], vineRegrowth: new Map(sim.vineRegrowAt),
+    mapId: sim.mapId, gardenPhase: sim.gardenPhase, gardenPhaseProgress: sim.gardenPhaseProgress,
+    vineCells: [...sim.vineCells], vineRegrowth: new Map(sim.vineRegrowAt),
     grid: sim.grid,
     players: [...sim.players.values()].map(p => ({
       id: p.id,
@@ -245,6 +248,8 @@ export class OnlineFrameBuilder {
     s.devices.forEach((d: any) => devices.push({ id: d.id, type: d.type, gx: d.gx, gy: d.gy }));
     return {
       mapId: s.mapId === "garden" ? "garden" : "classic",
+      gardenPhase: s.gardenPhase === "night" ? "night" : "day",
+      gardenPhaseProgress: s.gardenPhaseProgress,
       vineCells: [...s.vineCells],
       vineRegrowth: new Map(Array.from(s.vineRegrowAt ?? []).reduce((m: Map<number, number>, v: number, i: number, a: number[]) => { if (i % 2 === 0) m.set(v, a[i + 1]); return m; }, new Map<number, number>())),
       grid: this.gridData,
