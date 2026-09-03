@@ -10,13 +10,15 @@
   <div id="app">
     <!-- 大厅 -->
     <section id="screen-lobby" class="screen hidden">
+      <div class="lobby-scene" aria-hidden="true"><span class="sun-orb"></span><span class="hill hill-a"></span><span class="hill hill-b"></span><span class="firefly f1"></span><span class="firefly f2"></span><span class="firefly f3"></span></div>
       <div id="lobby-card">
-        <div id="logo">💣 泡泡堂</div>
+        <header class="lobby-top"><div class="avatar">🌱</div><div class="profile"><strong id="profile-name">冒险旅人</strong><span>准备出发</span></div><button class="icon-btn" id="btn-settings" type="button" title="设置">⚙</button></header>
+        <section class="lobby-hero"><div id="logo">泡泡堂</div>
         <p id="lobby-sub">和好友来一局经典炸弹人</p>
         <input id="nickname" maxlength="12" placeholder="输入昵称" />
         <button id="btn-quick2" class="btn primary">⚡ 快速匹配 · 2人</button>
         <button id="btn-quick4" class="btn primary">⚡ 快速匹配 · 4人</button>
-        <button id="btn-adventure" class="btn adventure">🗺 冒险模式 · 5人（人机补位）</button>
+        <button id="btn-adventure" class="btn adventure hero-action">开始冒险<span>组队探索 · 人机补位 · 随时加入</span></button></section>
         <div class="divider"><span>或</span></div>
         <div class="row create-row">
           <button id="btn-create" class="btn">🏠 创建2人房间</button>
@@ -26,7 +28,7 @@
           <input id="room-code" maxlength="4" placeholder="房间号" />
           <button id="btn-join" class="btn">加入</button>
         </div>
-        <button id="btn-local" class="btn ghost">🎮 单机练习（无需等待）</button>
+        <button id="btn-local" class="link-btn">🎮 单机练习</button><button id="btn-daily" class="link-btn">🎁 每日任务</button>
         <p id="lobby-status"></p>
       </div>
     </section>

@@ -1,4 +1,5 @@
 import type { Dir, InputHub } from "./input";
+import { sfx } from "./sfx";
 
 /**
  * 触屏操作：屏幕任意位置按住并滑动控制方向，右下角按钮负责动作。
@@ -25,21 +26,24 @@ export function createTouchControls(hub: InputHub): void {
   layer.id = "touch-layer";
   layer.innerHTML = `
     <div id="move-surface" aria-hidden="true"></div>
-    <div id="bomb-btn">💣</div>
-    <div id="atk-btn">⚔️</div>`;
+    <div id="joy-pad"><div id="joy-knob"></div></div>
+    <button id="bomb-btn" type="button">💣<small>放炸弹</small></button>
+    <button id="atk-btn" type="button">⚔️<small>武器</small></button>
+    <button id="pause-btn" type="button" title="暂停">Ⅱ</button>`;
   document.getElementById("app")!.appendChild(layer);
   // 长按不弹系统菜单
   layer.addEventListener("contextmenu", e => e.preventDefault());
 
   const surface = document.getElementById("move-surface")!;
+  const pad = document.getElementById("joy-pad")!;
+  const knob = document.getElementById("joy-knob")!;
   const bombBtn = document.getElementById("bomb-btn")!;
   const atkBtn = document.getElementById("atk-btn")!;
+  const pauseBtn = document.getElementById("pause-btn")!;
 
-  const pointers = new Map<number, { x: number; y: number }>();
+  let joyId: number | null = null;
   let startX = 0;
   let startY = 0;
-  let panX = 0;
-  let panY = 0;
   let currentDir: Dir | "none" = "none";
 
   const sendDir = (d: Dir | "none") => {
@@ -48,53 +52,36 @@ export function createTouchControls(hub: InputHub): void {
     hub.getHandlers()?.onDir(d);
   };
 
-  surface.addEventListener("pointerdown", e => {
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    surface.setPointerCapture(e.pointerId);
-    if (pointers.size === 1) {
-      startX = e.clientX; startY = e.clientY;
-    } else if (pointers.size === 2) {
-      sendDir("none");
-      panX = [...pointers.values()].reduce((n, p) => n + p.x, 0) / 2;
-      panY = [...pointers.values()].reduce((n, p) => n + p.y, 0) / 2;
-    }
+  const feedback = (name: "bomb" | "laser") => { navigator.vibrate?.(22); sfx.play(name === "bomb" ? "bomb" : "laser"); };
+  pad.addEventListener("pointerdown", e => {
+    if (joyId !== null) return;
+    joyId = e.pointerId; startX = e.clientX; startY = e.clientY; pad.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
-  surface.addEventListener("pointermove", e => {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.size >= 2) {
-      const pts = [...pointers.values()];
-      const cx = (pts[0].x + pts[1].x) / 2;
-      const cy = (pts[0].y + pts[1].y) / 2;
-      window.dispatchEvent(new CustomEvent("camera-pan", { detail: { dx: cx - panX, dy: cy - panY } }));
-      panX = cx; panY = cy;
-      sendDir("none");
-      return;
-    }
-    // 单指方向以本次触摸的累计位移为准；方向会持续保持到松手，支持连续走格。
-    const d = dirFromOffset(e.clientX - startX, e.clientY - startY);
-    if (d !== "none") sendDir(d);
+  pad.addEventListener("pointermove", e => {
+    if (e.pointerId !== joyId) return;
+    const r = pad.getBoundingClientRect(); const dx=e.clientX-(r.left+r.width/2), dy=e.clientY-(r.top+r.height/2); const d=dirFromOffset(dx,dy);
+    const dist=Math.min(42,Math.hypot(dx,dy)); const k=Math.hypot(dx,dy)?dist/Math.hypot(dx,dy):0; knob.style.transform=`translate(calc(-50% + ${dx*k}px),calc(-50% + ${dy*k}px))`; sendDir(d);
   });
   const release = (e: PointerEvent) => {
-    if (!pointers.delete(e.pointerId)) return;
-    if (pointers.size === 0) sendDir("none");
-    else { const p = [...pointers.values()][0]; startX = p.x; startY = p.y; }
+    if (e.pointerId !== joyId) return; joyId=null; knob.style.transform="translate(-50%,-50%)"; sendDir("none");
   };
-  surface.addEventListener("pointerup", release);
-  surface.addEventListener("pointercancel", release);
+  pad.addEventListener("pointerup", release); pad.addEventListener("pointercancel", release);
 
   bombBtn.addEventListener("pointerdown", e => {
     e.preventDefault();
+    feedback("bomb");
     hub.getHandlers()?.onBomb();
   });
   atkBtn.addEventListener("pointerdown", e => {
     e.preventDefault();
+    feedback("laser");
     hub.getHandlers()?.onAttack();
   });
 
   // 阻止移动端双击缩放 / 长按选中文本（不影响 Pointer 事件）
-  for (const el of [surface, bombBtn, atkBtn]) {
+  pauseBtn.addEventListener("pointerdown", e => { e.preventDefault(); sendDir("none"); window.dispatchEvent(new Event("game-pause")); navigator.vibrate?.(18); });
+  for (const el of [surface, pad, bombBtn, atkBtn, pauseBtn]) {
     el.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
   }
 }

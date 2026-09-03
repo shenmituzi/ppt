@@ -9,8 +9,10 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
   const status = document.getElementById("lobby-status")!;
   const nickname = document.getElementById("nickname") as HTMLInputElement;
   nickname.value = localStorage.getItem("pt-name") || "";
+  const profileName = document.getElementById("profile-name");
+  if (profileName) profileName.textContent = nickname.value || "冒险旅人";
   // input 事件：无论手输还是程序填充都能及时保存
-  nickname.addEventListener("input", () => localStorage.setItem("pt-name", nickname.value.trim()));
+  nickname.addEventListener("input", () => { localStorage.setItem("pt-name", nickname.value.trim()); if (profileName) profileName.textContent = nickname.value.trim() || "冒险旅人"; });
 
   const say = (s: string) => (status.textContent = s);
   const guard = (fn: () => Promise<void>) =>
@@ -87,6 +89,8 @@ export function initLobby(onEnter: (room: GameRoom) => void, onLocal: () => void
 
   // 单机练习入口（index.html 中的 btn-local）
   document.getElementById("btn-local")!.onclick = onLocal;
+  document.getElementById("btn-settings")!.onclick = () => say("设置已准备好，当前沿用设备音效与昵称");
+  document.getElementById("btn-daily")!.onclick = () => say("每日任务：完成一局冒险模式即可领取奖励");
 
   // 匹配：进入队列后显示等待室；10 秒还没凑齐人给出明确指引
   let waitHint: ReturnType<typeof setTimeout> | undefined;
