@@ -289,3 +289,37 @@ body.game-active #touch-layer { display: block; }
 .lobby-card .btn { min-height:56px; }
 button, input { -webkit-appearance:none; appearance:none; }
 @media (max-width:460px){#screen-lobby{width:calc(100% - 20px);min-height:calc(100vh - 16px)}#lobby-card{padding:16px}.lobby-hero #logo{font-size:42px}.lobby-hero .btn{min-height:64px}.lobby-bottom .btn{min-height:56px}}
+
+/* ---------- 游戏化大厅层级 ---------- */
+#screen-lobby { width: min(450px, calc(100vw - 24px)); }
+#lobby-card { position: relative; overflow: hidden; padding: 20px; gap: 14px; border: 2px solid rgba(255,255,255,.78); background: rgba(255,253,246,.9); }
+#lobby-card::before { content:""; position:absolute; inset:0 0 auto; height:116px; background:linear-gradient(180deg,rgba(255,232,137,.36),rgba(255,255,255,0)); pointer-events:none; }
+.lobby-top, .lobby-hero, .lobby-quick, .divider, .create-row, #lobby-card > .row, #lobby-card > .link-btn, #lobby-status { position:relative; z-index:1; }
+.lobby-top { padding: 2px 2px 10px; border-bottom: 1px solid #e5edcf; }
+.avatar { background: #98d477; border: 3px solid #fff; box-shadow: 0 4px 0 #6aae61; }
+.icon-btn { box-shadow: 0 3px 0 #ded9bc; transition: transform .1s, box-shadow .1s; }
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #ded9bc; }
+.lobby-hero { padding: 8px 4px 2px; }
+.world-mark { display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:999px; color:#7e641e; background:#fff0ad; border:1px solid #f6d978; font-size:11px; font-weight:800; box-shadow:0 3px 0 #eed38a; }
+.world-bubble { display:grid; place-items:center; width:18px; height:18px; border-radius:50%; color:#fff; background:#f27f70; }
+#logo { margin-top:10px; font-size:50px; line-height:1; color:#4f8d50; text-shadow:0 3px 0 #fff, 0 6px 0 #d2e8a7, 0 10px 18px rgba(74,132,69,.2); }
+#lobby-sub { max-width:290px; margin:10px auto 14px; color:#718b68; line-height:1.55; }
+#nickname { background:#fffef9!important; box-shadow:inset 0 2px 5px rgba(101,132,76,.08); }
+.hero-action { min-height:78px!important; border-radius:22px!important; border:3px solid rgba(255,255,255,.5)!important; box-shadow:0 7px 0 #d76559, 0 12px 20px rgba(221,101,84,.22)!important; }
+.hero-action:active { transform:translateY(5px)!important; box-shadow:0 2px 0 #d76559, 0 5px 10px rgba(221,101,84,.16)!important; }
+.hero-action b { display:block; font-size:22px; letter-spacing:1px; }
+.hero-action span { margin-top:5px; font-size:12px; }
+.lobby-quick { padding: 2px 2px 0; }
+.section-label { display:block; margin-bottom:8px; color:#8c9d7d; font-size:11px; font-weight:800; letter-spacing:1px; text-transform:uppercase; }
+.quick-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.quick-actions .btn { min-height:54px; padding:10px 6px; font-size:14px; border-radius:16px; box-shadow:0 4px 0 #e4b44a, 0 8px 13px rgba(236,182,68,.16); }
+.divider { margin:0; }
+.create-row .btn, #lobby-card > .row .btn { border-radius:15px; }
+.lobby-bottom { border-top:1px solid #e5edcf; padding-top:4px; }
+@media (max-width:460px) {
+  body { padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: env(safe-area-inset-bottom); }
+  #screen-lobby { width:calc(100% - 16px); }
+  #lobby-card { padding:15px; border-radius:24px; }
+  #logo { font-size:44px; }
+  .lobby-hero { padding-top:5px; }
+}
