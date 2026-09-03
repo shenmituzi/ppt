@@ -1,5 +1,13 @@
 import { ItemType, TILE } from "@pt/shared";
 
+const ART = {
+  outline: "#496447",
+  playerHighlight: "#ffffff",
+  monsterMain: "#d94f63",
+  rare: "#8f68d8",
+  gold: "#e8a020",
+};
+
 /**
  * 治愈系矢量美术：所有贴图/角色用平滑的渐变和圆角绘制（非像素风）。
  * 静态地形预渲染成 32×32 离屏画布，动态角色逐帧矢量绘制。
@@ -307,7 +315,7 @@ export function drawPlayerBody(
   ctx.ellipse(cx, cy + 10, 10 - bounce * 0.8, 3.6, 0, 0, Math.PI * 2);
   ctx.fill();
   // 脚
-  ctx.fillStyle = "#5a4a6a";
+  ctx.fillStyle = ART.outline;
   const step = moving ? Math.sin(now / 90) * 2 : 0;
   ctx.beginPath();
   ctx.ellipse(cx - 4.5 + step, cy + 8.5, 3, 2.2, 0, 0, Math.PI * 2);
@@ -323,7 +331,7 @@ export function drawPlayerBody(
   ctx.ellipse(cx, y, 11.5, 12.5, 0, 0, Math.PI * 2);
   ctx.fill();
   // 眼睛
-  ctx.fillStyle = "#3a3548";
+  ctx.fillStyle = ART.outline;
   ctx.beginPath();
   ctx.ellipse(cx - 4.2, y - 2, 2.1, 2.9, 0, 0, Math.PI * 2);
   ctx.ellipse(cx + 4.2, y - 2, 2.1, 2.9, 0, 0, Math.PI * 2);
@@ -516,7 +524,7 @@ export function drawMonsterBody(ctx: CanvasRenderingContext2D, cx: number, cy: n
   ctx.fill();
   const g = ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, 13);
   g.addColorStop(0, "#ffb36b");
-  g.addColorStop(1, "#d94f63");
+  g.addColorStop(1, ART.monsterMain);
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.ellipse(cx, cy, 12, 10.5 * (1 + squash), 0, 0, Math.PI * 2);
@@ -527,7 +535,7 @@ export function drawMonsterBody(ctx: CanvasRenderingContext2D, cx: number, cy: n
   ctx.ellipse(cx, cy + 3.5, 6.5, 4.5, 0, 0, Math.PI * 2);
   ctx.fill();
   // 犄角
-  ctx.fillStyle = "#9e304f";
+  ctx.fillStyle = ART.outline;
   for (const s of [-1, 1]) {
     ctx.beginPath();
     ctx.moveTo(cx + s * 6, cy - 8);
@@ -553,7 +561,7 @@ export function drawMonsterBody(ctx: CanvasRenderingContext2D, cx: number, cy: n
   ctx.arc(cx + 5.3, cy - 2.2, 0.7, 0, Math.PI * 2);
   ctx.fill();
   // 嘴（小表情）
-  ctx.strokeStyle = "#7d253d";
+  ctx.strokeStyle = ART.outline;
   ctx.lineWidth = 1.4;
   ctx.lineCap = "round";
   ctx.beginPath();

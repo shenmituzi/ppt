@@ -1,9 +1,17 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --grass-900:#405f3d; --grass-700:#5f7c4e; --grass-500:#78be63; --grass-100:#dff2c9;
+  --sun-500:#ffc857; --sun-200:#ffe49a; --coral-500:#f27f70;
+  --sky-200:#bce8f5; --rare-purple:#8f68d8; --rare-gold:#e8a020;
+  --ink-muted:#759268; --ink-weak:#9aa88f; --card:#fffdf6;
+  --radius-sm:12px; --radius-md:18px; --radius-lg:28px;
+  --shadow-card:0 12px 30px rgba(71,112,65,.18); --shadow-float:0 8px 18px rgba(71,112,65,.24);
+}
 html, body { overscroll-behavior: none; }
 body {
   /* 治愈系：天空到草地的柔和渐变 */
   background: linear-gradient(180deg, #c3e7fb 0%, #d8f0e0 42%, #fdf4d8 100%);
-  color: #5a6b52;
+  color: var(--grass-900);
   font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   min-height: 100vh;
   display: flex; justify-content: center;
@@ -32,7 +40,7 @@ body {
   background: rgba(255, 253, 246, .92);
   border: 1px solid rgba(255, 255, 255, .9);
   border-radius: 22px;
-  box-shadow: 0 18px 44px rgba(120, 150, 110, .35);
+  box-shadow: var(--shadow-card);
 }
 #logo {
   text-align: center;
@@ -66,6 +74,7 @@ body {
 }
 .btn:hover { transform: translateY(-2px); filter: brightness(1.05); box-shadow: 0 8px 18px rgba(99, 179, 92, .45); }
 .btn:active { transform: translateY(1px); filter: brightness(.96); }
+.btn:disabled, .btn[disabled] { opacity:.45; filter:none; box-shadow:none; cursor:not-allowed; }
 .btn.primary { background: linear-gradient(180deg, #ffd98a, #ffbe55); color: #7a5416;
   box-shadow: 0 5px 14px rgba(255, 190, 85, .45), inset 0 1px 0 rgba(255, 255, 255, .6); }
 .btn.primary:hover { box-shadow: 0 8px 18px rgba(255, 190, 85, .5); }
@@ -104,7 +113,7 @@ body {
   padding: 5px 16px; border-radius: 999px;
   background: rgba(255, 253, 246, .85);
   border: 1.5px solid rgba(255, 255, 255, .9);
-  box-shadow: 0 3px 8px rgba(120, 150, 110, .25);
+  box-shadow: 0 4px 12px rgba(71,112,65,.14);
   font-weight: 700; color: #5f7c4e;
 }
 #hud .pill.warn { color: #7a5416; background: rgba(255, 236, 190, .9); }
@@ -227,7 +236,7 @@ body.game-active #touch-layer { display: block; }
   width: min(320px, 92vw); max-height: 70vh; overflow-y: auto;
   background: rgba(255, 253, 246, .97);
   border: 2px solid #ffe1a8; border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(120, 140, 100, .4);
+  box-shadow: var(--shadow-float);
   padding: 12px; pointer-events: auto; touch-action: pan-y;
 }
 #shop-panel.hidden { display: none; }
