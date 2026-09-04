@@ -7,16 +7,21 @@ import {
   TILES, drawPlayerBody, drawBombBody, drawFlameCell, drawItemTile,
   drawMonsterBody, rr, type ViewerView,
 } from "./cozy";
+import { THEMES } from "./themes";
 
 /** 骑乘载具的小自行车（画在角色脚下） */
-function drawBike(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
+function drawBike(ctx: CanvasRenderingContext2D, cx: number, cy: number, moving: boolean, now: number) {
+  ctx.fillStyle = "#f7b85b"; ctx.strokeStyle = "#496447"; ctx.lineWidth = 1.5;
+  rr(ctx, cx - 12, cy - 1, 24, 10, 4); ctx.fill(); ctx.stroke();
   ctx.strokeStyle = "#f26d6d";
   ctx.lineWidth = 2;
   ctx.lineCap = "round";
   for (const wx of [-6, 6]) {
+    const spin = moving ? now / 80 : 0;
     ctx.beginPath();
     ctx.arc(cx + wx, cy + 8, 3.4, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + wx, cy + 8); ctx.lineTo(cx + wx + Math.cos(spin) * 3, cy + 8 + Math.sin(spin) * 3); ctx.stroke();
   }
   ctx.beginPath();
   ctx.moveTo(cx - 6, cy + 8);
@@ -27,6 +32,25 @@ function drawBike(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
   ctx.moveTo(cx - 2, cy + 2);
   ctx.lineTo(cx + 6, cy + 8);
   ctx.stroke();
+}
+
+function drawWeapon(ctx: CanvasRenderingContext2D, weapon: string, facing: FrameData["players"][number]["facing"], now: number) {
+  if (!weapon || weapon === "none") return;
+  const sx = facing === "left" ? -1 : 1;
+  const up = facing === "up";
+  ctx.save(); ctx.translate(up ? 5 : sx * 10, up ? -10 : 2); if (!up) ctx.scale(sx, 1);
+  ctx.strokeStyle = "#496447"; ctx.lineCap = "round";
+  if (weapon === "laser") {
+    ctx.lineWidth = 3; ctx.strokeStyle = "#496447"; ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(4, 0); ctx.stroke();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = "#a8ff5e"; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(12, -8); ctx.stroke();
+  } else if (weapon === "pistol") {
+    ctx.fillStyle = "#5f6f68"; rr(ctx, 0, -3, 10, 5, 2); ctx.fill(); ctx.fillRect(2, 1, 3, 5);
+  } else if (weapon === "shield") {
+    ctx.fillStyle = "rgba(124,196,255,.85)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(4, 0, 8, -Math.PI / 2, Math.PI / 2); ctx.lineTo(4, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (weapon === "pokeball") {
+    ctx.rotate(Math.sin(now / 180) * .08); ctx.fillStyle = "#f27f70"; ctx.beginPath(); ctx.arc(4, 0, 4.5, Math.PI, 0); ctx.fill(); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(4, 0, 4.5, 0, Math.PI); ctx.fill(); ctx.strokeStyle = "#496447"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-.5, 0); ctx.lineTo(8.5, 0); ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /** 精灵球（困住玩家的表现） */
@@ -130,9 +154,10 @@ export class Renderer {
     const canvas = ctx.canvas;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     this.updateCamera(canvas, viewer);
+    this.drawParallax(f.mapId);
     ctx.save(); ctx.translate(-this.cameraX, -this.cameraY);
     this.drawTiles(f.grid, f.mapId, f.vineCells, f.vineRegrowth, f.elapsedMs);
-    for (const [i, s] of SPAWNS.entries()) this.drawSpawnPad(s.gx, s.gy, i);
+    for (const [i, s] of SPAWNS.entries()) this.drawSpawnPad(s.gx, s.gy, i, f.mapId);
     this.drawGroundWeather(f);
     // 穿梭胶囊（地面层，呼吸光圈）
     for (const pp of f.portals) {
@@ -160,7 +185,7 @@ export class Renderer {
     }
     for (const d of f.devices) this.drawDevice(d, nowMs);
     for (const m of f.monsters) this.drawMonster(m, nowMs);
-    for (const p of f.players) this.drawPlayer(p, nowMs);
+    for (const p of f.players) this.drawPlayer(p, nowMs, f.bombs.some(b => b.ownerId === p.id && b.fuse > BOMB_FUSE_MS - 180), p.id === viewer?.id);
     // 鸟群本体
     for (const b of birds) this.drawBird(b.x, b.y, b.flap, b.dir);
     // 子弹（发光小弹丸）
@@ -206,16 +231,20 @@ export class Renderer {
     this.cameraY = Math.max(0, Math.min(Math.max(0, GRID_H * TILE - canvas.height), this.cameraY));
   }
 
-  private drawTiles(grid: Uint8Array, mapId: string = "classic", vineCells: number[] = [], vineRegrowth = new Map<number, number>(), elapsedMs = 0) {
+  private drawTiles(grid: Uint8Array, mapId: "classic" | "garden" = "classic", vineCells: number[] = [], vineRegrowth = new Map<number, number>(), elapsedMs = 0) {
+    const theme = THEMES[mapId];
     // 第一遍：草地（水晶缝隙透出地面）
     for (let gy = 0; gy < GRID_H; gy++) {
       for (let gx = 0; gx < GRID_W; gx++) {
         const h = cellHash(gx, gy);
-        const tile = mapId === "garden"
-          ? TILES.grassA
-          : (h % 17 === 0 ? TILES.grassFlower : h % 2 === 0 ? TILES.grassA : TILES.grassB);
-        this.ctx.drawImage(tile, gx * TILE, gy * TILE, TILE, TILE);
-        if (mapId === "garden" && h % 7 === 0) this.drawGardenFlower(gx, gy, h);
+        if (mapId === "classic") {
+          const tile = h % 17 === 0 ? TILES.grassFlower : h % 2 === 0 ? TILES.grassA : TILES.grassB;
+          this.ctx.drawImage(tile, gx * TILE, gy * TILE, TILE, TILE);
+        } else {
+          this.ctx.fillStyle = h % 2 ? theme.groundA : theme.groundB;
+          this.ctx.fillRect(gx * TILE, gy * TILE, TILE, TILE);
+          if (h % theme.detailRate === 0) this.drawGroundDetail(gx, gy, h, theme);
+        }
       }
     }
     // 第二遍：墙与可炸方块
@@ -232,7 +261,7 @@ export class Renderer {
             const remaining = vineRegrowth.get(gy * GRID_W + gx);
             const growing = remaining === undefined ? 1 : Math.max(0.12, Math.min(1, 1 - Math.max(0, remaining - elapsedMs) / 10_000));
             this.ctx.save();
-            this.ctx.strokeStyle = `rgba(63,155,85,${0.55 + growing * 0.35})`; this.ctx.lineWidth = 3.5;
+            this.ctx.strokeStyle = theme.vine; this.ctx.globalAlpha = 0.55 + growing * 0.35; this.ctx.lineWidth = 3.5;
             rr(this.ctx, x + 5, y + 5, TILE - 10, TILE - 10, 10); this.ctx.stroke();
             this.ctx.strokeStyle = "#9cdb75"; this.ctx.lineWidth = 2;
             this.ctx.beginPath(); this.ctx.moveTo(x + 12, y + TILE - 10); this.ctx.quadraticCurveTo(x + TILE * .45, y + TILE * (1 - growing), x + TILE - 12, y + 12); this.ctx.stroke();
@@ -250,7 +279,7 @@ export class Renderer {
       for (let gy = 1; gy < GRID_H - 1; gy++) for (let gx = 1; gx < GRID_W - 1; gx++) {
         if (grid[gy * GRID_W + gx] !== Tile.HardWall) continue;
         const x = gx * TILE, y = gy * TILE;
-        this.ctx.fillStyle = "#73c9b0"; this.ctx.fillRect(x, y, TILE, TILE);
+        this.ctx.fillStyle = theme.stream; this.ctx.fillRect(x, y, TILE, TILE);
         this.ctx.strokeStyle = "rgba(255,255,255,.42)"; this.ctx.lineWidth = 2;
         this.ctx.beginPath(); this.ctx.moveTo(x + 10, y + 23); this.ctx.quadraticCurveTo(x + 30, y + 14, x + 53, y + 23); this.ctx.stroke();
       }
@@ -262,12 +291,36 @@ export class Renderer {
     }
   }
 
-  private drawGardenFlower(gx: number, gy: number, hash: number) {
-    const ctx = this.ctx; const colors = ["#fff4bd", "#f59b91", "#d9b6ef", "#fffdf6"];
+  private drawGroundDetail(gx: number, gy: number, hash: number, theme: typeof THEMES.garden) {
+    const ctx = this.ctx; const colors = theme.flower;
     const x = gx * TILE + 12 + (hash % 38), y = gy * TILE + 12 + ((hash >>> 8) % 38);
-    ctx.fillStyle = colors[hash % colors.length];
-    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(x + Math.cos(i * Math.PI / 2) * 3, y + Math.sin(i * Math.PI / 2) * 3, 2.5, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = "#f6c957"; ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+    if (hash % 3 === 0) {
+      ctx.fillStyle = colors[hash % colors.length];
+      for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(x + Math.cos(i * Math.PI / 2) * 2.6, y + Math.sin(i * Math.PI / 2) * 2.6, 2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = "#ffc857"; ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2); ctx.fill();
+    } else if (hash % 3 === 1) {
+      ctx.strokeStyle = theme.detail; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - 3, y + 3); ctx.quadraticCurveTo(x - 2, y - 3, x, y - 5); ctx.moveTo(x, y + 3); ctx.quadraticCurveTo(x + 2, y - 2, x + 4, y - 4); ctx.stroke();
+    } else {
+      ctx.fillStyle = "rgba(117,146,104,.34)"; ctx.beginPath(); ctx.ellipse(x, y, 3.4, 2.2, -.3, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  private drawParallax(mapId: "classic" | "garden") {
+    if (mapId !== "garden") return;
+    const ctx = this.ctx;
+    const theme = THEMES.garden;
+    ctx.save();
+    ctx.translate(-this.cameraX * 0.3, -this.cameraY * 0.3);
+    ctx.fillStyle = theme.parallax;
+    for (let i = -1; i < 9; i++) {
+      const x = i * 150 + 30;
+      ctx.beginPath();
+      ctx.arc(x, 46, 42, Math.PI, 0);
+      ctx.arc(x + 38, 50, 34, Math.PI, 0);
+      ctx.arc(x + 72, 45, 45, Math.PI, 0);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   private drawGardenNight(f: FrameData, nowMs: number) {
@@ -288,12 +341,12 @@ export class Renderer {
     this.ctx.globalAlpha = 1;
   }
 
-  private drawSpawnPad(gx: number, gy: number, colorIndex: number) {
+  private drawSpawnPad(gx: number, gy: number, colorIndex: number, mapId: "classic" | "garden") {
     const { ctx } = this;
     ctx.fillStyle = PLAYER_COLORS[colorIndex] + "45";
     rr(ctx, gx * TILE + 4, gy * TILE + 4, TILE - 8, TILE - 8, 8);
     ctx.fill();
-    ctx.strokeStyle = PLAYER_COLORS[colorIndex] + "80";
+    ctx.strokeStyle = mapId === "garden" ? THEMES.garden.spawn : PLAYER_COLORS[colorIndex] + "80";
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 4]);
     rr(ctx, gx * TILE + 4, gy * TILE + 4, TILE - 8, TILE - 8, 8);
@@ -333,26 +386,32 @@ export class Renderer {
     });
   }
 
-  private drawPlayer(p: FrameData["players"][number], nowMs: number) {
+  private drawPlayer(p: FrameData["players"][number], nowMs: number, bombFlash: boolean, isSelf: boolean) {
     const { ctx } = this;
     if (!p.alive) return;
-    if (p.invincible && Math.floor(nowMs / 150) % 2 === 0) return;
     const cx = center(p.x);
     const cy = center(p.y);
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(VISUAL_SCALE, VISUAL_SCALE);
-    drawPlayerBody(ctx, 0, 0, p.colorIndex % 4, p.moving, nowMs);
+    if (p.invincible) ctx.globalAlpha = .62 + Math.sin(nowMs / 180) * .1;
+    if (p.mounted) drawBike(ctx, 0, 3, p.moving, nowMs);
+    drawPlayerBody(ctx, 0, p.mounted ? -4 : 0, p.colorIndex % 4, p.moving, nowMs, p.facing, !!p.trapped, bombFlash, p.id);
+    drawWeapon(ctx, p.weapon ?? "none", p.facing, nowMs);
     ctx.restore();
+    if (isSelf) {
+      ctx.strokeStyle = "rgba(255,255,255,.9)";
+      ctx.fillStyle = "rgba(255,255,255,.12)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(cx, cy + TILE * .42, TILE * .34, TILE * .12, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
     // 无敌护盾
     if (p.invincible) {
-      ctx.strokeStyle = "rgba(255,255,255,.8)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = `rgba(255,200,87,${.58 + Math.sin(nowMs / 180) * .22})`;
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(cx, cy, 22, nowMs / 220, nowMs / 220 + Math.PI * 2);
       ctx.stroke();
-      ctx.setLineDash([]);
     }
     // 天气道具徽章
     let bx = center(p.x) - 8;
@@ -365,7 +424,6 @@ export class Renderer {
     if (p.bootsOn) badge("❄");
     if (p.rodOn) badge("⚡");
     if (p.lanternOn) badge("🏮");
-    if (p.weapon && p.weapon !== "none" && p.weapon !== "shield") badge("⚔");
     // 昵称
     if (p.name) {
       ctx.font = 'bold 10px "Microsoft YaHei", sans-serif';

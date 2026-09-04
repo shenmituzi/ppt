@@ -138,7 +138,7 @@ function runGameLoop(getFrame: (dtMs: number, nowMs: number) => FrameData, myId:
 
     // 雾天视野：以自己为中心的光圈参数
     const me = f.players.find(p => p.id === myId);
-    const viewer = me && me.alive ? { x: me.x, y: me.y, lantern: !!me.lanternOn } : null;
+    const viewer = me && me.alive ? { x: me.x, y: me.y, id: me.id, lantern: !!me.lanternOn } : null;
     renderer.draw(f, now, [...ghosts.values()], viewer);
 
     // HUD（三枚信息胶囊：天气 / 存活 / 阶段信息）

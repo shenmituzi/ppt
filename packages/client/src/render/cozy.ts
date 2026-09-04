@@ -13,7 +13,7 @@ const ART = {
  * 静态地形预渲染成 32×32 离屏画布，动态角色逐帧矢量绘制。
  */
 
-export interface ViewerView { x: number; y: number; lantern: boolean }
+export interface ViewerView { x: number; y: number; lantern: boolean; id?: string }
 
 function makeTile(draw: (ctx: CanvasRenderingContext2D) => void): HTMLCanvasElement {
   const cv = document.createElement("canvas");
@@ -300,6 +300,10 @@ export function drawPlayerBody(
   colorIdx: number,
   moving: boolean,
   now: number,
+  facing: "front" | "up" | "left" | "right" = "front",
+  trapped = false,
+  bombFlash = false,
+  id = "",
 ) {
   const pals = [
     { C: "#ff8a8a", c: "#e06666" },
@@ -307,46 +311,66 @@ export function drawPlayerBody(
     { C: "#ffd97a", c: "#e8b84d" },
     { C: "#8de0a0", c: "#5cc07a" },
   ][colorIdx % 4];
-  const bounce = moving ? Math.abs(Math.sin(now / 130)) * 2.2 : Math.sin(now / 500) * 0.6;
-  const y = cy - bounce;
-  // 影子
+  const step = moving ? Math.sin(now / 90) : 0;
+  const bounce = moving ? Math.abs(step) * 1.8 : Math.sin(now / 520) * 0.45;
+  const side = facing === "left" ? -1 : facing === "right" ? 1 : 0;
+  const blink = !trapped && !bombFlash && now % 3600 > 3460;
+  const hairTone = id.length % 2 ? "#5b493e" : "#6d5848";
   ctx.fillStyle = "rgba(60,90,60,.22)";
   ctx.beginPath();
-  ctx.ellipse(cx, cy + 10, 10 - bounce * 0.8, 3.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy + 11, 11 - bounce * 0.5, 3.4, 0, 0, Math.PI * 2);
   ctx.fill();
-  // 脚
-  ctx.fillStyle = ART.outline;
-  const step = moving ? Math.sin(now / 90) * 2 : 0;
-  ctx.beginPath();
-  ctx.ellipse(cx - 4.5 + step, cy + 8.5, 3, 2.2, 0, 0, Math.PI * 2);
-  ctx.ellipse(cx + 4.5 - step, cy + 8.5, 3, 2.2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // 身体（上浅下深的柔和渐变）
-  const g = ctx.createRadialGradient(cx - 4, y - 5, 2, cx, y, 13.5);
-  g.addColorStop(0, "#ffffff");
-  g.addColorStop(0.35, pals.C);
-  g.addColorStop(1, pals.c);
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.ellipse(cx, y, 11.5, 12.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // 眼睛
+
+  // Short legs alternate without changing the character's footprint.
   ctx.fillStyle = ART.outline;
   ctx.beginPath();
-  ctx.ellipse(cx - 4.2, y - 2, 2.1, 2.9, 0, 0, Math.PI * 2);
-  ctx.ellipse(cx + 4.2, y - 2, 2.1, 2.9, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - 4 + step * 1.8, cy + 9, 3.2, 2.2, step * .12, 0, Math.PI * 2);
+  ctx.ellipse(cx + 4 - step * 1.8, cy + 9, 3.2, 2.2, -step * .12, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#ffffff";
+
+  const bodyY = cy + 2 - bounce;
+  const body = ctx.createRadialGradient(cx - 4, bodyY - 5, 2, cx, bodyY, 13);
+  body.addColorStop(0, "#ffffff"); body.addColorStop(.35, pals.C); body.addColorStop(1, pals.c);
+  ctx.fillStyle = body; ctx.strokeStyle = ART.outline; ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(cx - 3.5, y - 3, 0.9, 0, Math.PI * 2);
-  ctx.arc(cx + 4.9, y - 3, 0.9, 0, Math.PI * 2);
-  ctx.fill();
-  // 腮红
+  ctx.ellipse(cx, bodyY, 9.5, 10, side * .08, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  // The head occupies roughly 45% of the total height and has its own outline.
+  const headX = cx + side * 1.8, headY = cy - 10 - bounce;
+  const skin = ctx.createRadialGradient(headX - 4, headY - 5, 1, headX, headY, 13);
+  skin.addColorStop(0, "#fffdf1"); skin.addColorStop(1, "#f2cfa7");
+  ctx.fillStyle = skin; ctx.beginPath(); ctx.ellipse(headX, headY, 11, 10, side * .06, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  // Four inexpensive silhouettes: cowlick, bow, cap and rounded ears.
+  ctx.fillStyle = colorIdx === 2 ? pals.c : hairTone; ctx.strokeStyle = ART.outline; ctx.lineWidth = 1.4;
+  if (colorIdx % 4 === 0) { ctx.beginPath(); ctx.moveTo(headX - 2, headY - 9); ctx.quadraticCurveTo(headX - 6, headY - 17, headX + 1, headY - 12); ctx.stroke(); }
+  else if (colorIdx % 4 === 1) { ctx.beginPath(); ctx.ellipse(headX - 5, headY - 10, 5, 3.4, -.45, 0, Math.PI * 2); ctx.ellipse(headX + 5, headY - 10, 5, 3.4, .45, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+  else if (colorIdx % 4 === 2) { ctx.beginPath(); ctx.arc(headX, headY - 8, 9, Math.PI, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.fillRect(headX - 10, headY - 9, 20, 3); }
+  else { for (const ex of [-7, 7]) { ctx.beginPath(); ctx.arc(headX + ex, headY - 8, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); } }
+
+  if (facing !== "up") {
+    const eyeY = headY - 1;
+    ctx.strokeStyle = ART.outline; ctx.fillStyle = ART.outline; ctx.lineWidth = 1.8;
+    if (trapped) {
+      for (const ex of [-4, 4]) { ctx.beginPath(); ctx.moveTo(headX + ex - 2, eyeY - 2); ctx.lineTo(headX + ex + 2, eyeY + 2); ctx.moveTo(headX + ex + 2, eyeY - 2); ctx.lineTo(headX + ex - 2, eyeY + 2); ctx.stroke(); }
+    } else if (blink) {
+      ctx.beginPath(); ctx.moveTo(headX - 6, eyeY); ctx.lineTo(headX - 2, eyeY); ctx.moveTo(headX + 2, eyeY); ctx.lineTo(headX + 6, eyeY); ctx.stroke();
+    } else {
+      const eyeR = bombFlash ? 2.8 : 2.2;
+      ctx.beginPath(); ctx.ellipse(headX - 4 + side, eyeY, eyeR, bombFlash ? 3.4 : 2.8, 0, 0, Math.PI * 2); ctx.ellipse(headX + 4 + side, eyeY, eyeR, bombFlash ? 3.4 : 2.8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(headX - 3.4 + side, eyeY - 1, .8, 0, Math.PI * 2); ctx.arc(headX + 4.6 + side, eyeY - 1, .8, 0, Math.PI * 2); ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = hairTone; ctx.beginPath(); ctx.arc(headX, headY - 1, 7.5, Math.PI, Math.PI * 2); ctx.fill();
+  }
   ctx.fillStyle = "rgba(255,150,150,.55)";
-  ctx.beginPath();
-  ctx.ellipse(cx - 7, y + 1.5, 2, 1.3, 0, 0, Math.PI * 2);
-  ctx.ellipse(cx + 7, y + 1.5, 2, 1.3, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.ellipse(headX - 7, headY + 3, 1.8, 1.1, 0, 0, Math.PI * 2); ctx.ellipse(headX + 7, headY + 3, 1.8, 1.1, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (trapped) {
+    ctx.strokeStyle = ART.gold; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(headX, headY - 16, 9, 3, now / 500, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#ffe49a";
+    for (let i = 0; i < 3; i++) { const a = now / 350 + i * Math.PI * 2 / 3; ctx.beginPath(); ctx.arc(headX + Math.cos(a) * 9, headY - 16 + Math.sin(a) * 3, 1.5, 0, Math.PI * 2); ctx.fill(); }
+  }
 }
 
 export function drawBombBody(ctx: CanvasRenderingContext2D, cx: number, cy: number, urgency: number, now: number) {

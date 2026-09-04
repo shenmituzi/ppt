@@ -22,12 +22,13 @@ export interface PlayerView {
   weapon?: string;
   mounted?: boolean;
   trapped?: boolean;
+  facing: "front" | "up" | "left" | "right";
 }
 export interface BulletView { id: string; x: number; y: number; dx: number; dy: number }
 export interface PortalPairView { id: string; ax: number; ay: number; bx: number; by: number; remainingMs: number }
 export interface BeamView { cells: Vec[]; at: number }
 
-export interface BombView { id: string; gx: number; gy: number; fuse: number }
+export interface BombView { id: string; gx: number; gy: number; fuse: number; ownerId?: string }
 export interface FlameView { id: string; cells: Vec[]; life: number }
 export interface ItemView { id: string; gx: number; gy: number; type: ItemType }
 export interface WarnView { gx: number; gy: number; strikeAt: number }
@@ -77,6 +78,19 @@ export interface FrameData {
 }
 type Phase = "waiting" | "gathering" | "playing" | "ended";
 
+type Facing = PlayerView["facing"];
+const simLastPos = new Map<string, { x: number; y: number; facing: Facing }>();
+function inferFacing(id: string, x: number, y: number, store: Map<string, { x: number; y: number; facing: Facing }>): Facing {
+  const last = store.get(id);
+  let facing = last?.facing ?? "front";
+  if (last) {
+    const dx = x - last.x, dy = y - last.y;
+    if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) facing = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : (dy < 0 ? "up" : "front");
+  }
+  store.set(id, { x, y, facing });
+  return facing;
+}
+
 /** 单机模式：直接从 GameSim 构造渲染帧 */
 export function simToFrame(sim: GameSim): FrameData {
   return {
@@ -101,12 +115,13 @@ export function simToFrame(sim: GameSim): FrameData {
       weapon: p.weapon,
       mounted: p.mounted,
       trapped: sim.elapsedMs < p.trappedUntil,
+      facing: inferFacing(p.id, p.x, p.y, simLastPos),
       sun: p.sun,
       mushroomLv: p.mushroomLv,
     })),
     devices: sim.devices.map(d => ({ id: String(d.id), type: d.type, gx: d.gx, gy: d.gy })),
     bombs: sim.bombs.map(b => ({
-      id: String(b.id), gx: b.gx, gy: b.gy, fuse: Math.max(0, b.explodeAt - sim.elapsedMs),
+      id: String(b.id), gx: b.gx, gy: b.gy, fuse: Math.max(0, b.explodeAt - sim.elapsedMs), ownerId: b.ownerId,
     })),
     flames: sim.explosions.map(e => ({
       id: String(e.id), cells: e.cells, life: Math.max(0, e.expireAt - sim.elapsedMs),
@@ -155,6 +170,7 @@ import type { GameRoomStateView, PlayerStateView } from "../schema-types";
 /** 服务器 Schema → 渲染帧；玩家位置做指数平滑（时间常数 ~90ms，画面连续） */
 export class OnlineFrameBuilder {
   private disp = new Map<string, { x: number; y: number }>();
+  private facingPos = new Map<string, { x: number; y: number; facing: Facing }>();
   private cachedGrid = "";
   private gridData: Uint8Array = new Uint8Array(0);
   private warns: (WarnView & { receivedAt: number })[] = [];
@@ -215,13 +231,14 @@ export class OnlineFrameBuilder {
         weapon: p.weapon,
         mounted: p.mounted,
         trapped: p.trapped,
+        facing: inferFacing(id, p.x, p.y, this.facingPos),
       });
     });
     for (const id of [...this.disp.keys()]) {
-      if (!s.players.has(id)) this.disp.delete(id);
+      if (!s.players.has(id)) { this.disp.delete(id); this.facingPos.delete(id); }
     }
     const bombs: BombView[] = [];
-    s.bombs.forEach((b: any) => bombs.push({ id: b.id, gx: b.gx, gy: b.gy, fuse: b.fuse }));
+    s.bombs.forEach((b: any) => bombs.push({ id: b.id, gx: b.gx, gy: b.gy, fuse: b.fuse, ownerId: b.ownerId }));
     const flames: FlameView[] = [];
     s.flames.forEach((f: any) => {
       const cells: Vec[] = [];
