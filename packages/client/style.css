@@ -166,42 +166,74 @@ body {
 /* ---------- 触屏操作层 ---------- */
 #touch-layer {
   display: none; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
 body.game-active #touch-layer { display: block; }
-#move-surface { position: absolute; inset: 58px 0 0; pointer-events: auto; touch-action: none; }
-#joy-pad { position:absolute; left:calc(18px + env(safe-area-inset-left)); bottom:calc(22px + env(safe-area-inset-bottom)); width:138px; height:138px; border-radius:50%; background:rgba(255,255,255,.16); border:2px solid rgba(255,255,255,.48); pointer-events:auto; touch-action:none; z-index:3; }
-#joy-knob { position:absolute; left:50%; top:50%; width:58px; height:58px; border-radius:50%; transform:translate(-50%,-50%); background:radial-gradient(circle at 35% 30%,#fff,#dce8d2); box-shadow:0 5px 14px rgba(60,100,55,.35); pointer-events:none; }
+/* 左侧不是一个小圆盘，而是一整块可落指区域；右侧动作键保持多指独立。 */
+#move-surface {
+  position: absolute; left: 0; top: max(58px, env(safe-area-inset-top)); bottom: 0; width: 64%;
+  pointer-events: auto; touch-action: none; z-index: 1;
+}
+#joy-pad {
+  position: absolute; left: calc(18px + env(safe-area-inset-left)); bottom: calc(22px + env(safe-area-inset-bottom));
+  width: 148px; height: 148px; border-radius: 50%; pointer-events: none; z-index: 4;
+  background: radial-gradient(circle, rgba(255,255,255,.13) 0 41%, rgba(255,255,255,.22) 42% 69%, rgba(255,255,255,.08) 70%);
+  border: 2px solid rgba(255,255,255,.55); box-shadow: 0 10px 28px rgba(32,65,30,.22), inset 0 0 0 10px rgba(255,255,255,.04);
+  opacity: .7; transition: opacity .12s ease, transform .12s ease, left .12s ease, top .12s ease;
+}
+#joy-pad.active { opacity: 1; transform: scale(1.04); transition: opacity .08s ease, transform .08s ease; }
+#joy-knob {
+  position: absolute; left: 50%; top: 50%; width: 62px; height: 62px; border-radius: 50%; transform: translate(-50%,-50%);
+  background: radial-gradient(circle at 35% 28%, #fff, #e7f0df 58%, #c6d9bb); border: 2px solid rgba(255,255,255,.84);
+  box-shadow: 0 7px 17px rgba(45,83,41,.38), inset 0 -4px 6px rgba(77,110,65,.12); pointer-events: none;
+  transition: box-shadow .08s ease;
+}
+#joy-pad.active #joy-knob { box-shadow: 0 9px 22px rgba(45,83,41,.45), 0 0 0 5px rgba(255,255,255,.12); }
+.joy-dir { position:absolute; color:rgba(255,255,255,.52); font:800 15px/1 system-ui,sans-serif; transition:color .08s,transform .08s,opacity .08s; opacity:.72; }
+.joy-dir.up{left:50%;top:9px;transform:translateX(-50%)}.joy-dir.down{left:50%;bottom:9px;transform:translateX(-50%)}
+.joy-dir.left{left:10px;top:50%;transform:translateY(-50%)}.joy-dir.right{right:10px;top:50%;transform:translateY(-50%)}
+#joy-pad[data-dir="up"] .joy-dir.up,#joy-pad[data-dir="down"] .joy-dir.down,#joy-pad[data-dir="left"] .joy-dir.left,#joy-pad[data-dir="right"] .joy-dir.right { color:#fff7a8; opacity:1; filter:drop-shadow(0 0 5px rgba(255,235,100,.9)); }
+#joy-hint {
+  position:absolute; left:calc(22px + env(safe-area-inset-left)); bottom:calc(178px + env(safe-area-inset-bottom)); z-index:4;
+  padding:6px 10px; border-radius:999px; color:rgba(255,255,255,.9); background:rgba(35,65,38,.45); font:700 11px/1.2 "Microsoft YaHei",sans-serif;
+  transition:opacity .25s ease,transform .25s ease; animation:touch-hint 1.8s ease-in-out infinite;
+}
+#joy-hint.used { opacity:0; transform:translateY(8px); animation:none; }
+@keyframes touch-hint { 50% { transform:translateY(-4px); } }
+#bomb-btn,#atk-btn,#pause-btn { font-family:inherit; color:#fff; cursor:pointer; outline:none; -webkit-tap-highlight-color:transparent; }
 #bomb-btn {
-  position: absolute; right: 22px; bottom: 30px;
-  width: 84px; height: 84px; border-radius: 50%;
-  font-size: 40px; line-height: 80px; text-align: center;
-  background: rgba(255, 170, 150, .75);
-  border: 2.5px solid rgba(255, 255, 255, .8);
-  touch-action: none; pointer-events: auto; z-index: 2;
-  -webkit-touch-callout: none;
+  position:absolute; right:calc(20px + env(safe-area-inset-right)); bottom:calc(28px + env(safe-area-inset-bottom));
+  width:88px;height:88px;border-radius:50%;font-size:40px;line-height:80px;text-align:center;
+  background:linear-gradient(155deg,rgba(255,190,165,.96),rgba(241,112,91,.92));border:3px solid rgba(255,255,255,.82);
+  box-shadow:0 9px 0 rgba(169,72,61,.38),0 14px 24px rgba(105,50,42,.28);touch-action:none;pointer-events:auto;z-index:6;
 }
-#bomb-btn:active { background: rgba(255, 140, 115, .9); }
 #atk-btn {
-  position: absolute; right: 118px; bottom: 52px;
-  width: 64px; height: 64px; border-radius: 50%;
-  font-size: 30px; line-height: 62px; text-align: center;
-  background: rgba(126, 92, 255, .55);
-  border: 2px solid rgba(255, 255, 255, .7);
-  touch-action: none; pointer-events: auto; z-index: 2;
-  -webkit-touch-callout: none;
+  position:absolute;right:calc(120px + env(safe-area-inset-right));bottom:calc(55px + env(safe-area-inset-bottom));
+  width:66px;height:66px;border-radius:50%;font-size:30px;line-height:60px;text-align:center;
+  background:linear-gradient(155deg,rgba(164,143,255,.95),rgba(104,75,218,.92));border:2px solid rgba(255,255,255,.76);
+  box-shadow:0 7px 0 rgba(69,50,143,.34),0 12px 20px rgba(52,37,112,.25);touch-action:none;pointer-events:auto;z-index:6;
 }
-#atk-btn:active { background: rgba(126, 92, 255, .85); }
-#pause-btn { position:absolute; right:calc(18px + env(safe-area-inset-right)); top:calc(70px + env(safe-area-inset-top)); width:46px;height:46px;border:0;border-radius:14px;background:rgba(255,253,246,.88);color:#5f7c4e;font-size:20px;pointer-events:auto;z-index:3; }
-#bomb-btn small,#atk-btn small { display:block; margin-top:-12px; font:700 11px/1 "Microsoft YaHei",sans-serif; }
-#bomb-btn:active,#atk-btn:active,#pause-btn:active,#joy-pad:active { transform:scale(.94); }
+#pause-btn { position:absolute;right:calc(18px + env(safe-area-inset-right));top:calc(70px + env(safe-area-inset-top));width:46px;height:46px;border:0;border-radius:14px;background:rgba(255,253,246,.9);color:#5f7c4e;font-size:20px;pointer-events:auto;z-index:6;box-shadow:0 5px 14px rgba(54,83,50,.2); }
+#bomb-btn small,#atk-btn small { display:block;margin-top:-12px;font:700 11px/1 "Microsoft YaHei",sans-serif; }
+#bomb-btn.pressed,#atk-btn.pressed,#pause-btn:active { transform:translateY(5px) scale(.96);box-shadow:0 3px 0 rgba(70,50,45,.28),0 6px 12px rgba(40,30,30,.2);filter:brightness(1.06); }
 
-/* 手机小屏 */
+/* 手机小屏与横屏：保留安全区，并避免摇杆和动作键挤压游戏视野。 */
 @media (max-width: 460px) {
-  body { padding-top: 8px; align-items: flex-start; }
-  #screen-lobby { width: min(92vw, 336px); margin-top: 5vh; }
-  #game { width: calc(100vw - 8px); height: calc(100vh - 125px); min-height: 360px; }
-  #hud { font-size: 13px; min-height: 26px; }
-  #hint { display: none; }
+  body { padding-top:8px;align-items:flex-start; }
+  #screen-lobby { width:min(92vw,336px);margin-top:5vh; }
+  #game { width:calc(100vw - 8px);height:calc(100vh - 125px);min-height:360px; }
+  #hud { font-size:13px;min-height:26px; }
+  #hint { display:none; }
+  #move-surface { width:66%; }
+  #joy-pad { width:142px;height:142px; }
+}
+@media (orientation:landscape) and (max-height:560px) {
+  #move-surface { top:max(48px,env(safe-area-inset-top));width:58%; }
+  #joy-pad { width:130px;height:130px;left:calc(14px + env(safe-area-inset-left));bottom:calc(12px + env(safe-area-inset-bottom)); }
+  #joy-knob { width:56px;height:56px; }
+  #joy-hint { left:calc(18px + env(safe-area-inset-left));bottom:calc(146px + env(safe-area-inset-bottom)); }
+  #bomb-btn { width:78px;height:78px;right:calc(16px + env(safe-area-inset-right));bottom:calc(18px + env(safe-area-inset-bottom));font-size:35px;line-height:70px; }
+  #atk-btn { width:58px;height:58px;right:calc(105px + env(safe-area-inset-right));bottom:calc(40px + env(safe-area-inset-bottom));font-size:27px;line-height:52px; }
 }
 
 /* ---------- 玩家状态栏 ---------- */
